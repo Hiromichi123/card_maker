@@ -12,12 +12,15 @@ class Card:
         self.index = index
         
         # 动画相关
-        self.current_position = (position[0], -CARD_HEIGHT)  # 从屏幕上方开始
+        self.current_position = (position[0], -CARD_HEIGHT)
         self.scale = 0.0
         self.alpha = 0
         self.rotation = 0
         self.animation_progress = 0
         self.flip_progress = 0
+        
+        # 缓存渲染的图片
+        self.cached_surfaces = {}
         
         # 加载图片
         self.load_image()
@@ -26,15 +29,16 @@ class Card:
         """加载卡牌图片"""
         try:
             if os.path.exists(self.image_path):
-                self.image = pygame.image.load(self.image_path)
-                self.image = pygame.transform.scale(self.image, (CARD_WIDTH, CARD_HEIGHT))
+                original = pygame.image.load(self.image_path)
+                self.image = pygame.transform.smoothscale(original, (CARD_WIDTH, CARD_HEIGHT))
             else:
-                # 如果图片不存在，创建一个带颜色的矩形作为占位符
                 self.image = self.create_placeholder()
         except:
             self.image = self.create_placeholder()
-            
-        self.back_image = self.create_card_back()
+        
+        self.image = self.image.convert_alpha()
+        self.back_image = self.create_card_back().convert_alpha()
+        self.glow_surface = self.create_glow_surface()
         
     def create_placeholder(self):
         """创建占位符图片"""
@@ -42,21 +46,21 @@ class Card:
         color = COLORS.get(self.rarity, (100, 100, 100))
         surface.fill(color)
         
-        # 添加边框
         pygame.draw.rect(surface, (255, 255, 255), 
-                        (0, 0, CARD_WIDTH, CARD_HEIGHT), 3)
+                        (0, 0, CARD_WIDTH, CARD_HEIGHT), max(3, int(3 * UI_SCALE)))
         
-        # 添加稀有度文字
-        font = pygame.font.Font(None, 48)
+        # 使用中文字体
+        font_size = max(24, int(48 * UI_SCALE))
+        font = get_font(font_size)  # 修改这里
         text = font.render(self.rarity, True, (255, 255, 255))
         text_rect = text.get_rect(center=(CARD_WIDTH // 2, CARD_HEIGHT // 2))
         surface.blit(text, text_rect)
         
-        # 添加文件名
-        font_small = pygame.font.Font(None, 20)
+        font_small_size = max(12, int(20 * UI_SCALE))
+        font_small = get_font(font_small_size)  # 修改这里
         filename = os.path.basename(self.image_path)
         text_small = font_small.render(filename, True, (255, 255, 255))
-        text_rect_small = text_small.get_rect(center=(CARD_WIDTH // 2, CARD_HEIGHT - 20))
+        text_rect_small = text_small.get_rect(center=(CARD_WIDTH // 2, CARD_HEIGHT - int(20 * UI_SCALE)))
         surface.blit(text_small, text_rect_small)
         
         return surface
@@ -65,49 +69,62 @@ class Card:
         """创建卡背"""
         surface = pygame.Surface((CARD_WIDTH, CARD_HEIGHT))
         surface.fill((50, 50, 80))
-        pygame.draw.rect(surface, (100, 100, 150), 
-                        (10, 10, CARD_WIDTH - 20, CARD_HEIGHT - 20), 5)
         
-        font = pygame.font.Font(None, 36)
+        border_width = max(5, int(5 * UI_SCALE))
+        border_margin = max(10, int(10 * UI_SCALE))
+        pygame.draw.rect(surface, (100, 100, 150), 
+                        (border_margin, border_margin, 
+                         CARD_WIDTH - border_margin * 2, 
+                         CARD_HEIGHT - border_margin * 2), border_width)
+        
+        font_size = max(18, int(36 * UI_SCALE))
+        font = get_font(font_size)  # 修改这里
         text = font.render("?", True, (200, 200, 200))
         text_rect = text.get_rect(center=(CARD_WIDTH // 2, CARD_HEIGHT // 2))
         surface.blit(text, text_rect)
         
         return surface
     
+    def create_glow_surface(self):
+        """预创建发光效果surface"""
+        glow_margin = max(10, int(10 * UI_SCALE))
+        surface = pygame.Surface((CARD_WIDTH + glow_margin * 2, 
+                                 CARD_HEIGHT + glow_margin * 2), 
+                                pygame.SRCALPHA)
+        color = COLORS.get(self.rarity, (255, 255, 255))
+        border_width = max(5, int(5 * UI_SCALE))
+        pygame.draw.rect(surface, (*color, 100), 
+                        (0, 0, CARD_WIDTH + glow_margin * 2, 
+                         CARD_HEIGHT + glow_margin * 2), border_width)
+        return surface
+    
     def update(self, dt, start_time):
         """更新卡牌动画"""
-        # 计算延迟后的动画时间
         delay = self.index * STAGGER_DELAY
         elapsed = start_time - delay
         
         if elapsed < 0:
             return
         
-        # 下落动画
         if self.animation_progress < 1.0:
             self.animation_progress = min(1.0, elapsed / ANIMATION_DURATION)
-            # 使用缓动函数
             t = self.ease_out_bounce(self.animation_progress)
             
-            # 位置插值
             start_y = -CARD_HEIGHT
             self.current_position = (
                 self.target_position[0],
                 start_y + (self.target_position[1] - start_y) * t
             )
             
-            # 缩放和透明度
             self.scale = t
             self.alpha = int(255 * t)
         
-        # 翻转动画（在下落完成后）
         elif self.flip_progress < 1.0:
             self.flip_progress = min(1.0, (elapsed - ANIMATION_DURATION) / CARD_FLIP_DURATION)
             self.rotation = self.flip_progress * 180
     
     def ease_out_bounce(self, t):
-        """缓动函数 - 弹跳效果"""
+        """缓动函数"""
         if t < 0.5:
             return 2 * t * t
         else:
@@ -118,49 +135,46 @@ class Card:
         if self.scale <= 0:
             return
         
-        # 选择显示正面还是背面
         if self.rotation < 90:
-            # 显示卡背
             img = self.back_image
             scale_x = 1 - (self.rotation / 90)
         else:
-            # 显示卡面
             img = self.image
             scale_x = (self.rotation - 90) / 90
         
-        # 缩放
         width = int(CARD_WIDTH * self.scale * abs(scale_x))
         height = int(CARD_HEIGHT * self.scale)
         
-        if width > 0 and height > 0:
-            scaled_img = pygame.transform.scale(img, (width, height))
-            
-            # 设置透明度
-            scaled_img.set_alpha(self.alpha)
-            
-            # 居中绘制
-            pos = (
-                int(self.current_position[0] + (CARD_WIDTH - width) // 2),
-                int(self.current_position[1])
-            )
-            
-            screen.blit(scaled_img, pos)
-            
-            # 绘制稀有度光效
-            if self.flip_progress > 0.5:
-                self.draw_rarity_glow(screen)
+        if width <= 0 or height <= 0:
+            return
+        
+        cache_key = (width, height, self.rotation < 90)
+        if cache_key not in self.cached_surfaces:
+            self.cached_surfaces[cache_key] = pygame.transform.smoothscale(img, (width, height))
+        
+        scaled_img = self.cached_surfaces[cache_key].copy()
+        scaled_img.set_alpha(self.alpha)
+        
+        pos = (
+            int(self.current_position[0] + (CARD_WIDTH - width) // 2),
+            int(self.current_position[1])
+        )
+        
+        screen.blit(scaled_img, pos)
+        
+        if self.flip_progress > 0.5:
+            self.draw_rarity_glow(screen)
     
     def draw_rarity_glow(self, screen):
         """绘制稀有度光效"""
-        color = COLORS.get(self.rarity, (255, 255, 255))
         glow_alpha = int(100 * (self.flip_progress - 0.5) * 2)
+        glow_copy = self.glow_surface.copy()
+        glow_copy.set_alpha(glow_alpha)
         
-        glow_surface = pygame.Surface((CARD_WIDTH + 20, CARD_HEIGHT + 20), pygame.SRCALPHA)
-        pygame.draw.rect(glow_surface, (*color, glow_alpha), 
-                        (0, 0, CARD_WIDTH + 20, CARD_HEIGHT + 20), 5)
-        
-        screen.blit(glow_surface, 
-                   (self.current_position[0] - 10, self.current_position[1] - 10))
+        glow_margin = max(10, int(10 * UI_SCALE))
+        screen.blit(glow_copy, 
+                   (self.current_position[0] - glow_margin, 
+                    self.current_position[1] - glow_margin))
 
 
 class CardSystem:
@@ -175,19 +189,16 @@ class CardSystem:
         self.cards = []
         drawn_cards = []
         
-        # 获取所有可用的卡牌文件
         card_pool = self.get_card_pool()
         
-        # 抽取10张卡
         for i in range(TOTAL_CARDS):
             rarity, card_path = self.draw_single_card(card_pool)
             row = i // CARDS_PER_ROW
             col = i % CARDS_PER_ROW
             
-            # 计算卡牌位置（居中显示）
             total_width = CARDS_PER_ROW * CARD_WIDTH + (CARDS_PER_ROW - 1) * CARD_SPACING
             start_x = (WINDOW_WIDTH - total_width) // 2
-            start_y = 100 + row * (CARD_HEIGHT + CARD_SPACING)
+            start_y = int(WINDOW_HEIGHT * 0.15) + row * (CARD_HEIGHT + CARD_SPACING)
             
             position = (start_x + col * (CARD_WIDTH + CARD_SPACING), start_y)
             
@@ -209,7 +220,6 @@ class CardSystem:
                         if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
                 pool[rarity] = [os.path.join(rarity_path, f) for f in files]
             
-            # 如果没有找到图片，添加占位符
             if not pool[rarity]:
                 pool[rarity] = [f"{rarity}_placeholder_{i}.png" for i in range(5)]
         
@@ -217,7 +227,6 @@ class CardSystem:
     
     def draw_single_card(self, card_pool):
         """抽取单张卡牌"""
-        # 根据概率选择稀有度
         rand = random.randint(1, 100)
         cumulative = 0
         
@@ -228,7 +237,6 @@ class CardSystem:
                     card_path = random.choice(card_pool[rarity])
                     return rarity, card_path
         
-        # 默认返回D级
         return "D", random.choice(card_pool["D"])
     
     def update(self, dt):
@@ -239,7 +247,6 @@ class CardSystem:
             for card in self.cards:
                 card.update(dt, self.animation_start_time)
             
-            # 检查动画是否完成
             if self.animation_start_time > ANIMATION_DURATION + CARD_FLIP_DURATION + TOTAL_CARDS * STAGGER_DELAY:
                 self.is_animating = False
     

@@ -1,5 +1,10 @@
+"""
+    全局配置文件
+"""
 import ctypes
 import pygame
+import os
+import sys
 
 # 高DPI适配（仅Windows）
 try:
@@ -95,3 +100,48 @@ def update_ui_scale(screen_width, screen_height):
         WINDOW_WIDTH // 2 - BUTTON_WIDTH // 2,
         int(WINDOW_HEIGHT * 0.85)  # 屏幕85%的位置
     )
+
+# ==================== 字体配置 ====================
+def get_chinese_font():
+    """获取系统中文字体"""
+    if sys.platform == 'win32':
+        # Windows系统
+        font_paths = [
+            'C:/Windows/Fonts/msyh.ttc',      # 微软雅黑
+            'C:/Windows/Fonts/simhei.ttf',    # 黑体
+            'C:/Windows/Fonts/simsun.ttc',    # 宋体
+            'C:/Windows/Fonts/simkai.ttf',    # 楷体
+        ]
+    elif sys.platform == 'darwin':
+        # macOS系统
+        font_paths = [
+            '/System/Library/Fonts/PingFang.ttc',           # 苹方
+            '/System/Library/Fonts/STHeiti Light.ttc',      # 黑体-简
+            '/Library/Fonts/Arial Unicode.ttf',
+        ]
+    else:
+        # Linux系统
+        font_paths = [
+            '/usr/share/fonts/truetype/wqy/wqy-microhei.ttc',
+            '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
+            '/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf',
+        ]
+    
+    # 查找可用字体
+    for font_path in font_paths:
+        if os.path.exists(font_path):
+            print(f"使用中文字体: {font_path}")
+            return font_path
+    
+    print("警告: 未找到中文字体，将使用默认字体")
+    return None
+
+# 中文字体路径
+CHINESE_FONT_PATH = get_chinese_font()
+
+def get_font(size):
+    """获取指定大小的字体"""
+    if CHINESE_FONT_PATH:
+        return pygame.font.Font(CHINESE_FONT_PATH, size)
+    else:
+        return pygame.font.Font(None, size)
