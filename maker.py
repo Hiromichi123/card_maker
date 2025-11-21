@@ -5,14 +5,15 @@ import glob
 import json
 from PIL import Image, ImageDraw, ImageFont
 
-cards_path = "D:/Github/card_maker/cards"
-frame_path = "D:/Github/card_maker/cards/frame.png"
-json_path = "D:/Github/card_maker/cards.json"
-output_path = "D:/Github/card_maker/outputs"
-
+lv = "C"
+cards_path = "C:\\Users\\22716\\Desktop\\cards\\" + lv
+frame_path = "C:\\Users\\22716\\Desktop\\cards\\frame.png"
+#frame_path = "C:\\Users\\22716\\Desktop\\cards\\frame.webp"
+json_path = "C:\\Users\\22716\\Desktop\\cards\\" + lv + "\\cards.json"
+output_path = "C:\\Users\\22716\\Desktop\\outputs\\" + lv
 x_offset = 20  # 名称水平偏移量
 y_offset = 50 # 名称向下垂直偏移量
-FONT_SIZE = 60  # 字体大小
+FONT_SIZE = 50  # 字体大小
 STROKE_WIDTH = 1  # 描边宽度
 MAX_WIDTH = 1920
 MAX_HEIGHT = 1080
@@ -21,10 +22,10 @@ MAX_HEIGHT = 1080
 def choose_color_by_level(n):
     colors = {
         0: (0, 0, 255),    # 红色
-        1: (20, 150, 255), # 橙色
+        1: (20, 100, 255), # 橙色
         2: (0, 215, 255),  # 金色
-        3: (128, 0, 128), # 紫色
-        4: (255, 0, 0),   # 蓝色
+        3: (226, 43, 138), # 紫色
+        4: (255, 191, 0),  # 天蓝色
         5: (0, 255, 0),   # 绿色
         6: (128, 128, 128) # 灰色
     }
@@ -192,4 +193,6 @@ if __name__ == "__main__":
         level = e.get('level')
         card_img = find_card_image(cid, cards_path)
         output = os.path.join(output_path, f"{cid}.png")
+        if os.path.exists(output):
+            continue
         overlay_card(card_img, frame_path, output, card_name=card_name, level=level)
