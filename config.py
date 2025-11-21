@@ -15,23 +15,18 @@ except:
 # 窗口设置
 WINDOW_WIDTH = 2880
 WINDOW_HEIGHT = 1620
-FPS = 60  # 提高上限，让pygame尽可能跑快
+FPS = 90
 BACKGROUND_COLOR = (30, 30, 50)
 
 # UI缩放因子
 UI_SCALE = 1.0
 
-# 卡牌设置
-BASE_CARD_WIDTH = 360  #原720
-BASE_CARD_HEIGHT = 540 #原1080
-BASE_CARD_SPACING = 20
+# 抽卡设置
+CARD_WIDTH = 360  #原720
+CARD_HEIGHT = 540 #原1080
+CARD_SPACING = 40
 CARDS_PER_ROW = 5
 TOTAL_CARDS = 10
-
-# 实际使用的卡牌尺寸（运行时计算）
-CARD_WIDTH = BASE_CARD_WIDTH
-CARD_HEIGHT = BASE_CARD_HEIGHT
-CARD_SPACING = BASE_CARD_SPACING
 
 # 卡牌路径
 CARD_BASE_PATH = "outputs"
@@ -89,9 +84,9 @@ def update_ui_scale(screen_width, screen_height):
     UI_SCALE = min(scale_x, scale_y)
     
     # 更新卡牌尺寸
-    CARD_WIDTH = int(BASE_CARD_WIDTH * UI_SCALE)
-    CARD_HEIGHT = int(BASE_CARD_HEIGHT * UI_SCALE)
-    CARD_SPACING = int(BASE_CARD_SPACING * UI_SCALE)
+    CARD_WIDTH = int(CARD_WIDTH * UI_SCALE)
+    CARD_HEIGHT = int(CARD_HEIGHT * UI_SCALE)
+    CARD_SPACING = int(CARD_SPACING * UI_SCALE)
     
     # 更新按钮尺寸
     BUTTON_WIDTH = int(BASE_BUTTON_WIDTH * UI_SCALE)

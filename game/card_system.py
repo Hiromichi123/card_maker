@@ -176,16 +176,15 @@ class Card:
                    (self.current_position[0] - glow_margin, 
                     self.current_position[1] - glow_margin))
 
-
+"""卡牌系统"""
 class CardSystem:
-    """卡牌系统"""
     def __init__(self):
         self.cards = []
         self.animation_start_time = 0
         self.is_animating = False
-        
+    
+    """抽取卡牌"""
     def draw_cards(self):
-        """抽取卡牌"""
         self.cards = []
         drawn_cards = []
         
@@ -209,8 +208,8 @@ class CardSystem:
         self.animation_start_time = 0
         self.is_animating = True
         
+    """获取卡池"""  
     def get_card_pool(self):
-        """获取卡池"""
         pool = {rarity: [] for rarity in CARD_PROBABILITIES.keys()}
         
         for rarity in pool.keys():

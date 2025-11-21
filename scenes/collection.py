@@ -10,9 +10,14 @@ from ui.scroll_view import ScrollView
 from utils.inventory import get_inventory
 from config import *
 
+# 卡牌布局参数
+card_width = int(216 * UI_SCALE)
+card_height = int(324 * UI_SCALE)
+cards_per_row = 6
+card_spacing = int(30 * UI_SCALE)
+
+"""图鉴卡牌显示类"""
 class CollectionCard:
-    """图鉴卡牌显示类"""
-    
     def __init__(self, card_data, x, y, width, height):
         """
         Args:
@@ -108,26 +113,18 @@ class CollectionCard:
         text_rect = text.get_rect(center=center)
         surface.blit(text, text_rect)
 
-
+"""图鉴场景"""
 class CollectionScene(BaseScene):
-    """图鉴场景"""
-    
     def __init__(self, screen):
         super().__init__(screen)
-        
-        # 获取库存
-        self.inventory = get_inventory()
-        
-        # 背景
-        self.background = self.create_background()
+        self.inventory = get_inventory() # 获取库存
+        self.background = self.create_background()  # 背景
         
         # 字体
         self.title_font = get_font(max(32, int(64 * UI_SCALE)))
-        self.info_font = get_font(max(14, int(24 * UI_SCALE)))
-        self.small_font = get_font(max(12, int(18 * UI_SCALE)))
-        
-        # 创建UI
-        self.create_ui()
+        self.info_font = get_font(max(24, int(36 * UI_SCALE)))
+        self.small_font = get_font(max(18, int(24 * UI_SCALE)))
+        self.create_ui() # 创建UI
         
         # 卡牌显示相关
         self.card_widgets = []
@@ -164,7 +161,6 @@ class CollectionScene(BaseScene):
         scroll_y = int(WINDOW_HEIGHT * 0.15)
         scroll_width = int(WINDOW_WIDTH * 0.6)
         scroll_height = int(WINDOW_HEIGHT * 0.7)
-        
         self.scroll_view = ScrollView(scroll_x, scroll_y, scroll_width, scroll_height, 0)
         
         # 返回按钮
@@ -173,7 +169,7 @@ class CollectionScene(BaseScene):
         
         self.back_button = Button(
             int(WINDOW_WIDTH * 0.05),
-            int(WINDOW_HEIGHT * 0.9),
+            int(WINDOW_HEIGHT * 0.05),
             button_width,
             button_height,
             "返回主菜单",
@@ -191,7 +187,7 @@ class CollectionScene(BaseScene):
         filter_spacing = int(10 * UI_SCALE)
         
         self.filter_buttons = []
-        filters = ["全部", "A", "B", "C", "D"]
+        filters = ["全部", "SSS", "SS", "S", "A", "B", "C", "D"]
         
         for i, rarity in enumerate(filters):
             row = i // 2
@@ -225,26 +221,16 @@ class CollectionScene(BaseScene):
             cards_data = self.inventory.get_cards_by_rarity(self.selected_rarity)
         
         # 按稀有度和获取时间排序
-        rarity_order = {"A": 0, "B": 1, "C": 2, "D": 3}
+        rarity_order = {"SSS": 0, "SS": 1, "S": 2, "A": 3, "B": 4, "C": 5, "D": 6}
         cards_data.sort(key=lambda x: (rarity_order.get(x["rarity"], 99), x["first_obtained"]))
-        
-        # 创建卡牌widget
-        self.card_widgets = []
-        
-        # 卡牌布局参数
-        card_width = int(150 * UI_SCALE)
-        card_height = int(200 * UI_SCALE)
-        cards_per_row = 4
-        card_spacing = int(20 * UI_SCALE)
-        start_x = card_spacing
-        start_y = card_spacing
+        self.card_widgets = [] # 创建卡牌widget
         
         for i, card_data in enumerate(cards_data):
             row = i // cards_per_row
             col = i % cards_per_row
             
-            x = start_x + col * (card_width + card_spacing)
-            y = start_y + row * (card_height + card_spacing)
+            x = card_spacing + col * (card_width + card_spacing)
+            y = card_spacing + row * (card_height + card_spacing)
             
             card_widget = CollectionCard(card_data, x, y, card_width, card_height)
             self.card_widgets.append(card_widget)
@@ -252,7 +238,7 @@ class CollectionScene(BaseScene):
         # 更新滚动视图内容高度
         if cards_data:
             total_rows = (len(cards_data) + cards_per_row - 1) // cards_per_row
-            content_height = start_y + total_rows * (card_height + card_spacing) + card_spacing
+            content_height = card_height + total_rows * (card_height + card_spacing) + card_spacing
         else:
             content_height = 0
         
@@ -298,24 +284,15 @@ class CollectionScene(BaseScene):
     
     def draw(self):
         """绘制场景"""
-        # 背景
-        self.screen.blit(self.background, (0, 0))
+        self.screen.blit(self.background, (0, 0)) # 背景
+        self.draw_title() # 标题
+        self.draw_stats_panel() # 统计面板
         
-        # 标题
-        self.draw_title()
-        
-        # 统计面板
-        self.draw_stats_panel()
-        
-        # 筛选按钮
-        for btn in self.filter_buttons:
+        for btn in self.filter_buttons: # 筛选按钮
             btn.draw(self.screen)
         
-        # 滚动视图中的卡牌
-        self.draw_cards()
-        
-        # 返回按钮
-        self.back_button.draw(self.screen)
+        self.draw_cards() # 滚动视图中的卡牌
+        self.back_button.draw(self.screen) # 返回按钮
     
     def draw_title(self):
         """绘制标题"""
@@ -364,7 +341,7 @@ class CollectionScene(BaseScene):
             panel_y += int(30 * UI_SCALE)
         
         # 稀有度统计
-        for rarity in ["A", "B", "C", "D"]:
+        for rarity in ["SSS", "SS", "S", "A", "B", "C", "D"]:
             count = stats['rarity_stats'].get(rarity, 0)
             color = COLORS.get(rarity, (255, 255, 255))
             
@@ -379,7 +356,7 @@ class CollectionScene(BaseScene):
         if not self.card_widgets:
             # 没有卡牌时显示提示
             no_card_text = self.info_font.render(
-                "还没有收集到卡牌哦~", True, (150, 150, 150)
+                "还没有收集到卡牌哦~姆Q", True, (150, 150, 150)
             )
             text_rect = no_card_text.get_rect(
                 center=(self.scroll_view.rect.width // 2, 

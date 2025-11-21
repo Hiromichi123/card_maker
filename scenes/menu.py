@@ -35,10 +35,23 @@ class MainMenuScene(BaseScene):
         
         self.buttons = []
         
+        # 战斗按钮
+        battle_btn = Button(
+            button_x, 
+            panel_y + int(120 * UI_SCALE),
+            button_width, 
+            button_height,
+            "开始战斗",
+            color=(200, 50, 50),  # 红色表示战斗
+            hover_color=(230, 80, 80),
+            on_click=lambda: self.switch_to("battle")
+        )
+        self.buttons.append(battle_btn)
+
         # 抽卡按钮
         gacha_btn = Button(
             button_x, 
-            panel_y + int(120 * UI_SCALE),
+            panel_y + int(120 * UI_SCALE) + button_spacing,
             button_width, 
             button_height,
             "抽卡",
@@ -47,11 +60,24 @@ class MainMenuScene(BaseScene):
             on_click=lambda: self.switch_to("gacha")
         )
         self.buttons.append(gacha_btn)
+
+        # 卡组配置按钮
+        deck_btn = Button(
+            button_x, 
+            panel_y + int(120 * UI_SCALE) + button_spacing * 2,
+            button_width, 
+            button_height,
+            "出战卡组配置",
+            color=(100, 150, 255),
+            hover_color=(130, 180, 255),
+            on_click=lambda: self.switch_to("deck_builder")
+        )
+        self.buttons.append(deck_btn)
         
         # 图鉴按钮
         collection_btn = Button(
             button_x,
-            panel_y + int(120 * UI_SCALE) + button_spacing,
+            panel_y + int(120 * UI_SCALE) + button_spacing * 3,
             button_width,
             button_height,
             "卡牌图鉴",
@@ -64,7 +90,7 @@ class MainMenuScene(BaseScene):
         # 设置按钮
         settings_btn = Button(
             button_x,
-            panel_y + int(120 * UI_SCALE) + button_spacing * 2,
+            panel_y + int(120 * UI_SCALE) + button_spacing * 4,
             button_width,
             button_height,
             "设置",
@@ -77,7 +103,7 @@ class MainMenuScene(BaseScene):
         # 退出按钮
         quit_btn = Button(
             button_x,
-            panel_y + int(120 * UI_SCALE) + button_spacing * 3,
+            panel_y + int(120 * UI_SCALE) + button_spacing * 5,
             button_width,
             button_height,
             "退出游戏",

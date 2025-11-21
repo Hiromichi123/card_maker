@@ -14,23 +14,18 @@ class GachaScene(BaseScene):
     def __init__(self, screen):
         super().__init__(screen)
         
-        # 创建背景
-        self.background = self.create_background()
-        
-        # 卡牌系统
-        self.card_system = CardSystem()
-        
-        # 库存系统
-        self.inventory = get_inventory()
+        self.background = self.create_background() # 创建背景
+        self.card_system = CardSystem() # 卡牌系统
+        self.inventory = get_inventory() # 库存系统
         
         # 字体
         self.title_font = get_font(max(32, int(64 * UI_SCALE)))
         self.info_font = get_font(max(12, int(24 * UI_SCALE)))
         
         # 创建按钮
-        button_width = int(200 * UI_SCALE)
-        button_height = int(60 * UI_SCALE)
-        button_spacing = int(20 * UI_SCALE)
+        button_width = int(300 * UI_SCALE)
+        button_height = int(90 * UI_SCALE)
+        button_spacing = int(30 * UI_SCALE)
         
         # 抽卡按钮
         self.draw_button = Button(
@@ -38,7 +33,7 @@ class GachaScene(BaseScene):
             int(WINDOW_HEIGHT * 0.85),
             button_width,
             button_height,
-            "抽卡 10连",
+            "4500G 抽10连",
             color=(255, 140, 0),
             hover_color=(255, 165, 0),
             on_click=self.draw_cards
@@ -55,9 +50,9 @@ class GachaScene(BaseScene):
             hover_color=(130, 180, 255),
             on_click=lambda: self.switch_to("main_menu")
         )
-        
+
+    """创建背景"""
     def create_background(self):
-        """创建背景"""
         bg = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
         bg.fill(BACKGROUND_COLOR)
         
@@ -69,21 +64,18 @@ class GachaScene(BaseScene):
         
         return bg
     
+    """抽卡"""
     def draw_cards(self):
-        """抽卡"""
         if not self.card_system.is_animating:
-            # 执行抽卡
-            drawn_cards = self.card_system.draw_cards()
+            drawn_cards = self.card_system.draw_cards() # 执行抽卡
             
             # 保存到库存
             cards_to_save = [(card.image_path, card.rarity) 
                             for card in self.card_system.cards]
             self.inventory.add_cards(cards_to_save)
-            
-            print(f"抽到 {len(cards_to_save)} 张卡牌并已保存")
     
+    """处理事件"""
     def handle_event(self, event):
-        """处理事件"""
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 self.switch_to("main_menu")
@@ -94,20 +86,15 @@ class GachaScene(BaseScene):
         self.draw_button.handle_event(event)
         self.back_button.handle_event(event)
     
+    """更新"""
     def update(self, dt):
-        """更新"""
         self.card_system.update(dt)
     
+    """绘制"""
     def draw(self):
-        """绘制"""
-        # 背景
-        self.screen.blit(self.background, (0, 0))
-        
-        # 标题
-        self.draw_title()
-        
-        # 卡牌
-        self.card_system.draw(self.screen)
+        self.screen.blit(self.background, (0, 0)) # 背景
+        self.draw_title() # 标题
+        self.card_system.draw(self.screen) # 卡牌
         
         # 按钮
         self.draw_button.draw(self.screen)

@@ -11,17 +11,17 @@ from config import *
 # 导入场景
 from scenes.menu import MainMenuScene
 from scenes.gacha import GachaScene
-from scenes.collection import CollectionScene  # 添加这行
+from scenes.collection import CollectionScene
+from scenes.battle import BattleScene
+from scenes.deck_builder_scene import DeckBuilderScene
 
 class SceneManager:
     """场景管理器"""
-    
     def __init__(self):
         pygame.init()
         
-        # 高DPI适配
         try:
-            ctypes.windll.user32.SetProcessDPIAware()
+            ctypes.windll.user32.SetProcessDPIAware() # 高DPI适配
         except:
             pass
         
@@ -53,6 +53,8 @@ class SceneManager:
         self.scenes["main_menu"] = MainMenuScene(self.screen)
         self.scenes["gacha"] = GachaScene(self.screen)
         self.scenes["collection"] = CollectionScene(self.screen)
+        self.scenes["battle"] = BattleScene(self.screen)
+        self.scenes["deck_builder"] = DeckBuilderScene(self.screen)
         
     def switch_scene(self, scene_name):
         """切换场景"""
