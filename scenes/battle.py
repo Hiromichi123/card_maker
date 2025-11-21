@@ -241,7 +241,7 @@ class BattleScene(BaseScene):
                 # 应用亮度调整
                 bg = self.adjust_brightness(bg, BATTLE_BG_BRIGHTNESS)
                 
-                # 应用透明度（创建半透明遮罩）
+                # 应用透明度
                 if BATTLE_BG_ALPHA < 255:
                     overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
                     overlay.fill((0, 0, 0, 255 - BATTLE_BG_ALPHA))

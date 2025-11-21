@@ -1,5 +1,5 @@
 """
-主菜单场景
+战斗菜单场景
 """
 import pygame
 from scenes.base_scene import BaseScene
@@ -8,23 +8,18 @@ from ui.panel import Panel
 from config import *
 from config import get_font
 
-class MainMenuScene(BaseScene):
+class BattleMenuScene(BaseScene):
     def __init__(self, screen):
         super().__init__(screen)
-        
-        # 创建背景
-        self.background = self.create_background()
-        
-        # 标题
+        self.background = self.create_background() # 创建背景
         title_font_size = max(48, int(96 * UI_SCALE))
-        self.title_font = get_font(title_font_size)
+        self.title_font = get_font(title_font_size) # 标题
         
         # 创建面板
         panel_width = int(WINDOW_WIDTH * 0.4)
         panel_height = int(WINDOW_HEIGHT * 0.6)
         panel_x = (WINDOW_WIDTH - panel_width) // 2
         panel_y = int(WINDOW_HEIGHT * 0.25)
-        
         self.panel = Panel(panel_x, panel_y, panel_width, panel_height)
         
         # 创建按钮
@@ -32,86 +27,72 @@ class MainMenuScene(BaseScene):
         button_height = int(60 * UI_SCALE)
         button_x = panel_x + (panel_width - button_width) // 2
         button_spacing = int(80 * UI_SCALE)
-        
         self.buttons = []
         
-        # 战斗按钮
-        battle_btn = Button(
+        # 战斗1
+        battle_btn1 = Button(
             button_x, 
             panel_y + int(120 * UI_SCALE),
             button_width, 
             button_height,
-            "进入战斗",
-            color=(200, 50, 50),  # 红色表示战斗
+            "单人战役",
+            color=(200, 50, 50),  # 红色
             hover_color=(230, 80, 80),
-            on_click=lambda: self.switch_to("battle_menu")
+            on_click=lambda: self.switch_to("battle")
         )
-        self.buttons.append(battle_btn)
+        self.buttons.append(battle_btn1)
 
-        # 抽卡按钮
-        gacha_btn = Button(
+        # 战斗2
+        battle_btn2 = Button(
             button_x, 
             panel_y + int(120 * UI_SCALE) + button_spacing,
             button_width, 
             button_height,
-            "抽卡",
-            color=(255, 140, 0),
-            hover_color=(255, 165, 0),
-            on_click=lambda: self.switch_to("gacha")
+            "局域网 卡组对战",
+            color=(200, 50, 50),  # 红色
+            hover_color=(230, 80, 80),
+            on_click=lambda: self.switch_to("battle")
         )
-        self.buttons.append(gacha_btn)
+        self.buttons.append(battle_btn2)
 
-        # 卡组配置按钮
-        deck_btn = Button(
+        # 战斗3
+        battle_btn3 = Button(
             button_x, 
             panel_y + int(120 * UI_SCALE) + button_spacing * 2,
             button_width, 
             button_height,
-            "出战卡组配置",
-            color=(100, 150, 255),
-            hover_color=(130, 180, 255),
-            on_click=lambda: self.switch_to("deck_builder")
+            "局域网 任选对战",
+            color=(200, 50, 50),  # 红色
+            hover_color=(230, 80, 80),
+            on_click=lambda: self.switch_to("battle")
         )
-        self.buttons.append(deck_btn)
-        
-        # 图鉴按钮
-        collection_btn = Button(
-            button_x,
+        self.buttons.append(battle_btn3)
+
+        # 战斗4
+        battle_btn4 = Button(
+            button_x, 
             panel_y + int(120 * UI_SCALE) + button_spacing * 3,
-            button_width,
+            button_width, 
             button_height,
-            "卡牌图鉴",
-            color=(100, 150, 255),
-            hover_color=(130, 180, 255),
-            on_click=lambda: self.switch_to("collection")
+            "本地 任选对战（双人）",
+            color=(200, 50, 50),  # 红色
+            hover_color=(230, 80, 80),
+            on_click=lambda: self.switch_to("draft_scene")
         )
-        self.buttons.append(collection_btn)
+        self.buttons.append(battle_btn4)
         
-        # 设置按钮
-        settings_btn = Button(
+        # 返回主菜单按钮
+        back_btn = Button(
             button_x,
             panel_y + int(120 * UI_SCALE) + button_spacing * 4,
             button_width,
             button_height,
-            "设置",
+            "返回主菜单",
             color=(100, 150, 255),
             hover_color=(130, 180, 255),
-            on_click=lambda: self.switch_to("settings")
+            on_click=lambda: self.switch_to("main_menu")
         )
-        self.buttons.append(settings_btn)
-        
-        # 退出按钮
-        quit_btn = Button(
-            button_x,
-            panel_y + int(120 * UI_SCALE) + button_spacing * 5,
-            button_width,
-            button_height,
-            "退出游戏",
-            color=(200, 50, 50),
-            hover_color=(255, 70, 70),
-            on_click=self.quit_game
-        )
-        self.buttons.append(quit_btn)
+        self.buttons.append(back_btn)
         
         self.quit_flag = False
         
@@ -153,12 +134,12 @@ class MainMenuScene(BaseScene):
         self.screen.blit(self.background, (0, 0))
         
         # 绘制标题
-        title_text = self.title_font.render("卡牌战斗大师 模拟器", True, (255, 215, 0))
+        title_text = self.title_font.render("选择对战模式", True, (255, 215, 0))
         title_rect = title_text.get_rect(center=(WINDOW_WIDTH // 2, int(WINDOW_HEIGHT * 0.12)))
         
         # 标题阴影
         shadow_offset = max(3, int(3 * UI_SCALE))
-        shadow_text = self.title_font.render("卡牌战斗大师 模拟器", True, (0, 0, 0))
+        shadow_text = self.title_font.render("选择对战模式", True, (0, 0, 0))
         shadow_rect = shadow_text.get_rect(center=(WINDOW_WIDTH // 2 + shadow_offset, 
                                                    int(WINDOW_HEIGHT * 0.12) + shadow_offset))
         self.screen.blit(shadow_text, shadow_rect)

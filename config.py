@@ -79,8 +79,8 @@ def update_ui_scale(screen_width, screen_height):
     WINDOW_HEIGHT = screen_height
     
     # 基于1920x1080计算缩放比例
-    scale_x = screen_width / 1920
-    scale_y = screen_height / 1080
+    scale_x = screen_width / 2880
+    scale_y = screen_height / 1620
     UI_SCALE = min(scale_x, scale_y)
     
     # 更新卡牌尺寸
