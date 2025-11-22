@@ -3,8 +3,15 @@ import pygame
 import os
 from scenes.base_scene import BaseScene
 from ui.button import Button
-from ui.panel import Panel
 from config import *
+from game.hand_card import HandManager
+from utils.draft_manager import get_draft_manager # draft抽卡管理器
+from utils.battle_component import CardSlot, HealthBar # 战斗组件
+from game.deck_renderer import DeckRenderer #　卡堆渲染器
+
+# 抽卡动画
+GACHA_DELAY_INIT = 0.5  # 首张卡抽取延迟
+GACHA_DELAY_BETWEEN = 0.3  # 每张卡间隔时间
 
 # 背景设置
 BATTLE_BG_BRIGHTNESS = 0.7  # 背景亮度 (0.0-1.0)
@@ -29,13 +36,13 @@ BATTLE_SLOTS_COUNT = 5         # 战斗区槽位数量
 WAITING_SLOTS_COUNT = 8        # 等候区槽位数量
 
 # 位置配置（屏幕百分比）
-PLAYER_BATTLE_Y_RATIO = 0.55   # 玩家战斗区Y位置
-ENEMY_BATTLE_Y_RATIO = 0.28    # 敌人战斗区Y位置
-PLAYER_WAITING_Y_RATIO = 0.88  # 玩家等候区Y位置
+PLAYER_BATTLE_Y_RATIO = 0.50   # 玩家战斗区Y位置
+ENEMY_BATTLE_Y_RATIO = 0.23    # 敌人战斗区Y位置
+PLAYER_WAITING_Y_RATIO = 0.85  # 玩家等候区Y位置
 ENEMY_WAITING_Y_RATIO = 0.02   # 敌人等候区Y位置
 
 PLAYER_DISCARD_X_RATIO = 0.92  # 玩家弃牌堆X位置
-PLAYER_DISCARD_Y_RATIO = 0.85  # 玩家弃牌堆Y位置
+PLAYER_DISCARD_Y_RATIO = 0.80  # 玩家弃牌堆Y位置
 ENEMY_DISCARD_X_RATIO = 0.92   # 敌人弃牌堆X位置
 ENEMY_DISCARD_Y_RATIO = 0.05   # 敌人弃牌堆Y位置
 
@@ -45,148 +52,12 @@ HEALTH_BAR_HEIGHT = 50         # 血量条基础高度
 PLAYER_HEALTH_Y_RATIO = 0.85   # 玩家血量条Y位置
 ENEMY_HEALTH_Y_RATIO = 0.08    # 敌人血量条Y位置
 
-"""卡牌槽位类"""
-class CardSlot:
-    def __init__(self, x, y, width, height, slot_type="battle"):
-        self.rect = pygame.Rect(x, y, width, height)
-        self.slot_type = slot_type
-        self.card = None  # 当前槽位的卡牌
-        self.is_hovered = False
-        self.is_highlighted = False  # 是否可放置提示
-        from utils.card_database import get_card_database
-        self.card_database = get_card_database()
-        
-    def set_card(self, card):
-        """放置卡牌"""
-        self.card = card
-        
-    def remove_card(self):
-        """移除卡牌"""
-        card = self.card
-        self.card = None
-        return card
-        
-    def has_card(self):
-        """是否有卡牌"""
-        return self.card is not None
-        
-    def draw(self, screen):
-        """绘制槽位"""
-        # 槽位背景
-        if self.card:
-            # 有卡牌时不显示槽位框
-            pass
-        else:
-            # 空槽位
-            alpha = 150 if self.is_highlighted else 80
-            slot_surface = pygame.Surface((self.rect.width, self.rect.height), pygame.SRCALPHA)
-            
-            # 根据槽位类型选择颜色
-            if self.slot_type == "battle":
-                color = (100, 150, 200, alpha)
-                border_color = (150, 200, 255, 200)
-            elif self.slot_type == "waiting":
-                color = (150, 150, 100, alpha)
-                border_color = (200, 200, 150, 200)
-            else:  # discard
-                color = (150, 100, 100, alpha)
-                border_color = (200, 150, 150, 200)
-            
-            slot_surface.fill(color)
-            
-            # 边框
-            border_width = max(2, int(3 * UI_SCALE))
-            if self.is_hovered:
-                border_width = max(3, int(4 * UI_SCALE))
-                border_color = (255, 255, 255, 255)
-            
-            pygame.draw.rect(slot_surface, border_color, 
-                           (0, 0, self.rect.width, self.rect.height), 
-                           border_width, border_radius=max(5, int(8 * UI_SCALE)))
-            
-            screen.blit(slot_surface, self.rect)
-            
-            # 空槽位提示（小圆点或图标）
-            if not self.card and self.slot_type == "battle":
-                center = self.rect.center
-                radius = max(3, int(5 * UI_SCALE))
-                pygame.draw.circle(screen, (200, 200, 200, 100), center, radius)
-
-class HealthBar:
-    """血量条类"""
-    
-    def __init__(self, x, y, width, height, max_hp, current_hp, is_player=True):
-        """
-        Args:
-            x, y: 血量条位置
-            width, height: 血量条尺寸
-            max_hp: 最大血量
-            current_hp: 当前血量
-            is_player: 是否为玩家（影响颜色）
-        """
-        self.rect = pygame.Rect(x, y, width, height)
-        self.max_hp = max_hp
-        self.current_hp = current_hp
-        self.is_player = is_player
-        
-        # 动画当前血量（用于平滑过渡）
-        self.animated_hp = current_hp
-        
-    def set_hp(self, hp):
-        """设置血量"""
-        self.current_hp = max(0, min(hp, self.max_hp))
-        
-    def update(self, dt):
-        """更新血量动画"""
-        # 平滑过渡到目标血量
-        diff = self.current_hp - self.animated_hp
-        self.animated_hp += diff * min(1.0, dt * 5)
-        
-    def draw(self, screen):
-        """绘制血量条"""
-        # 背景
-        bg_color = (50, 50, 50)
-        pygame.draw.rect(screen, bg_color, self.rect, 
-                        border_radius=max(5, int(10 * UI_SCALE)))
-        
-        # 血量条
-        hp_ratio = self.animated_hp / self.max_hp
-        hp_width = int(self.rect.width * hp_ratio)
-        
-        if hp_width > 0:
-            hp_rect = pygame.Rect(self.rect.x, self.rect.y, hp_width, self.rect.height)
-            
-            # 根据血量百分比选择颜色
-            if hp_ratio > 0.6:
-                hp_color = (100, 255, 100) if self.is_player else (255, 100, 100)
-            elif hp_ratio > 0.3:
-                hp_color = (255, 200, 100)
-            else:
-                hp_color = (255, 100, 100) if self.is_player else (100, 255, 100)
-            
-            pygame.draw.rect(screen, hp_color, hp_rect, 
-                           border_radius=max(5, int(10 * UI_SCALE)))
-        
-        # 边框
-        border_color = (100, 100, 100)
-        border_width = max(2, int(3 * UI_SCALE))
-        pygame.draw.rect(screen, border_color, self.rect, border_width,
-                        border_radius=max(5, int(10 * UI_SCALE)))
-        
-        # 血量数字
-        font = get_font(max(16, int(24 * UI_SCALE)))
-        hp_text = f"{int(self.current_hp)}/{self.max_hp}"
-        text_surface = font.render(hp_text, True, (255, 255, 255))
-        text_rect = text_surface.get_rect(center=self.rect.center)
-        screen.blit(text_surface, text_rect)
-
+"""战斗场景"""
 class BattleScene(BaseScene):
-    """战斗场景"""
-    
     def __init__(self, screen):
         super().__init__(screen)
         
-        # 背景图片路径（可配置）
+        # 背景图片路径
         self.background_image_path = "assets/battle_bg.png"
         self.background = self.load_background()
         
@@ -210,12 +81,33 @@ class BattleScene(BaseScene):
         self.enemy_waiting_slots = []  # 敌人等候区
         self.player_discard_slot = None  # 玩家弃牌堆
         self.enemy_discard_slot = None   # 敌人弃牌堆
+        self.create_slots() # 创建槽位
+        self.create_buttons() # 创建按钮
         
-        # 创建槽位
-        self.create_slots()
+        # 卡堆渲染器
+        player_deck_x = int(WINDOW_WIDTH * 0.05)
+        player_deck_y = int(WINDOW_HEIGHT * 0.65)  # 玩家卡堆位置（左下）
+        self.player_deck_renderer = DeckRenderer(player_deck_x, player_deck_y, is_player=True)
+        enemy_deck_x = int(WINDOW_WIDTH * 0.05)
+        enemy_deck_y = int(WINDOW_HEIGHT * 0.15)  # 敌人卡堆位置（左上）
+        self.enemy_deck_renderer = DeckRenderer(enemy_deck_x, enemy_deck_y, is_player=False)
+
+        # 手牌管理器
+        self.player_hand = HandManager(is_player=True)
+        self.player_hand.deck_position = (player_deck_x + 60, player_deck_y + 90)
+        self.enemy_hand = HandManager(is_player=False)
+        self.enemy_hand.deck_position = (enemy_deck_x + 60, enemy_deck_y + 90)
         
-        # 创建按钮
-        self.create_buttons()
+        # 牌堆（从draft获取）
+        self.player_deck = []
+        self.enemy_deck = []
+
+        # 抽卡动画队列
+        self.draw_queue = []  # [(hand_manager, card_data, delay), ...]
+        self.draw_timer = 0.0
+
+        # 初始化标志
+        self.battle_initialized = False
         
     def load_background(self):
         """加载背景图片"""
@@ -424,10 +316,29 @@ class BattleScene(BaseScene):
 
     """获取鼠标悬停的卡牌数据"""
     def get_hovered_card(self, mouse_pos):
-        for card in self.player_battle_slots + self.enemy_battle_slots + self.player_waiting_slots + self.enemy_waiting_slots:
-            if card.rect.collidepoint(mouse_pos):
-                if hasattr(card, 'card_data'):
-                    return card.card_data 
+         # 优先检查手牌（最上层）
+        player_card_data = self.player_hand.get_hovered_card_data()
+        if player_card_data:
+            return player_card_data
+        
+        enemy_card_data = self.enemy_hand.get_hovered_card_data()
+        if enemy_card_data:
+            return enemy_card_data
+        
+        # 然后检查槽位中的卡牌
+        all_slots = (
+            self.player_battle_slots + 
+            self.enemy_battle_slots + 
+            self.player_waiting_slots + 
+            self.enemy_waiting_slots +
+            [self.player_discard_slot, self.enemy_discard_slot]
+        )
+        
+        for slot in all_slots:
+            if slot.has_card() and slot.rect.collidepoint(mouse_pos):
+                return slot.card.card_data
+        
+        return None
      
     """事件处理"""
     def handle_event(self, event):
@@ -436,12 +347,18 @@ class BattleScene(BaseScene):
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 self.switch_to("main_menu")
+
+        # 手牌事件（优先处理）
+        selected_card = self.player_hand.handle_event(event)
+        if selected_card:
+            print(f"选中卡牌: {selected_card.card_data.name}")
+        # TODO: 处理出牌逻辑
         
-        # 鼠标悬停检测
+        # 鼠标移动
         if event.type == pygame.MOUSEMOTION:
             mouse_pos = event.pos
             
-            # 检测所有槽位的悬停
+            # 更新槽位悬停
             all_slots = (
                 self.player_battle_slots + 
                 self.enemy_battle_slots + 
@@ -462,21 +379,31 @@ class BattleScene(BaseScene):
         # 更新血量条动画
         self.player_health_bar.update(dt)
         self.enemy_health_bar.update(dt)
-    
+        # 更新手牌动画
+        self.player_hand.update(dt)
+        self.enemy_hand.update(dt)
+
+        # 处理抽卡队列
+        if self.draw_queue:
+            self.draw_timer += dt
+            
+            # 检查是否到时间抽卡
+            while self.draw_queue and self.draw_timer >= self.draw_queue[0][1]:
+                who, _ = self.draw_queue.pop(0)
+                self.draw_card(who, animate=True)
+        
+    """绘制场景"""
     def draw(self):
-        """绘制场景"""
-        # 绘制背景
-        self.screen.blit(self.background, (0, 0))
-        
-        # 绘制场景标识（方便调试）
-        self.draw_scene_labels()
-        
-        # 绘制血量条
-        self.draw_health_bars()
-        
-        # 绘制所有槽位
-        self.draw_slots()
-        
+        self.screen.blit(self.background, (0, 0)) # 背景
+        self.draw_scene_labels() # 场景标识
+        self.draw_health_bars() # 血量条
+        self.draw_slots() # 槽位
+        # 卡堆
+        self.player_deck_renderer.draw(self.screen)
+        self.enemy_deck_renderer.draw(self.screen)
+        # 手牌
+        self.player_hand.draw(self.screen)
+        self.enemy_hand.draw(self.screen)
         # 绘制按钮
         self.back_button.draw(self.screen)
         self.end_turn_button.draw(self.screen)
@@ -566,3 +493,69 @@ class BattleScene(BaseScene):
         discard_y = self.enemy_discard_slot.rect.y - int(25 * UI_SCALE)
         self.screen.blit(discard_label, (discard_x, discard_y))
         self.enemy_discard_slot.draw(self.screen)
+
+    """进入场景时初始化"""
+    def enter(self):
+        super().enter()
+    
+        if not self.battle_initialized:
+            self.initialize_battle()
+            self.battle_initialized = True
+
+    """初始化战斗"""
+    def initialize_battle(self):
+        draft_manager = get_draft_manager()
+        
+        # 从draft获取双方卡组
+        from utils.card_database import get_card_database
+        db = get_card_database()
+        
+        # 玩家1卡组（下方）
+        for card_dict in draft_manager.player1_cards:
+            card_data = db.get_card_by_path(card_dict.get('path'))
+            if card_data:
+                self.player_deck.append(card_data)
+        
+        # 玩家2卡组（上方）
+        for card_dict in draft_manager.player2_cards:
+            card_data = db.get_card_by_path(card_dict.get('path'))
+            if card_data:
+                self.enemy_deck.append(card_data)
+        
+        # 洗牌
+        import random
+        random.shuffle(self.player_deck)
+        random.shuffle(self.enemy_deck)
+        
+        # 更新卡堆数量
+        self.player_deck_renderer.set_count(len(self.player_deck))
+        self.enemy_deck_renderer.set_count(len(self.enemy_deck))
+        
+        # 设置抽卡动画队列（开局各抽3张，交替抽取）
+        self.draw_queue = []
+        delay = GACHA_DELAY_INIT
+        for i in range(3):
+            # 玩家抽卡
+            self.draw_queue.append(('player', delay))
+            delay += GACHA_DELAY_BETWEEN  # 每张卡间隔0.3秒
+            # 敌人抽卡
+            self.draw_queue.append(('enemy', delay))
+            delay += GACHA_DELAY_BETWEEN
+        print(f"战斗初始化完成")
+
+    """抽卡"""
+    def draw_card(self, who, animate=True):
+        if who == 'player':
+            if self.player_deck:
+                card_data = self.player_deck.pop(0)
+                self.player_hand.add_card(card_data, animate=animate)
+                self.player_deck_renderer.set_count(len(self.player_deck))
+                return True
+        else:  # enemy
+            if self.enemy_deck:
+                card_data = self.enemy_deck.pop(0)
+                self.enemy_hand.add_card(card_data, animate=animate)
+                self.enemy_deck_renderer.set_count(len(self.enemy_deck))
+                return True
+        
+        return False

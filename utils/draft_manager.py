@@ -1,11 +1,19 @@
-"""
-自选卡牌管理系统
-用于临时存储Draft选择的卡牌
-"""
+"""自选卡牌管理系统 用于存储Draft选择的卡牌"""
 import json
 import os
 import random
-from config import CARD_BASE_PATH, CARD_PROBABILITIES
+
+CARD_BASE_PATH = "assets/outputs" # 路径
+# 抽卡概率配置
+CARD_PROBABILITIES = {
+    "SSS": 0.5,  # SSS - 0.5%
+    "SS": 2,     # SS - 2%
+    "S": 4,      # S - 4%
+    "A": 8.5,    # A - 8.5%
+    "B": 15,     # B - 15%
+    "C": 30,     # C - 30%
+    "D": 40      # D - 20%
+}
 
 """自选卡牌管理类"""
 class DraftManager:
@@ -89,7 +97,6 @@ class DraftManager:
             })
             card["picked"] = True
             card["picked_by"] = "player1"
-            print(f"玩家1选择了卡牌: {card['rarity']} - {card['path']}")
         else:  # player2
             if len(self.player2_cards) >= self.CARDS_PER_PLAYER:
                 return False
@@ -99,7 +106,6 @@ class DraftManager:
             })
             card["picked"] = True
             card["picked_by"] = "player2"
-            print(f"玩家2选择了卡牌: {card['rarity']} - {card['path']}")
         
         # 切换回合
         self.switch_turn()

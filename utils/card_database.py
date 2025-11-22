@@ -83,9 +83,7 @@ class CardDatabase:
         self.cards = {}  # {card_id: CardData}
         self.cards_by_rarity = defaultdict(list)  # {rarity: [CardData]}
         self.path_to_id_map = {}  # {image_path: card_id}
-        
-        # 加载所有目录的卡牌
-        self.load_all()
+        self.load_all() # 加载所有目录的卡牌
     
     def load_all(self):
         """加载所有稀有度目录下的卡牌"""
@@ -97,18 +95,10 @@ class CardDatabase:
         
         if total_loaded > 0:
             print(f"卡牌数据库已加载: {total_loaded} 张卡牌")
-            self.print_summary()
         else:
             print("警告: 未加载任何卡牌，请检查目录结构和 cards.json 文件")
     
     def load_rarity_cards(self, rarity):
-        """
-        加载指定稀有度目录的卡牌
-        Args:
-            rarity: 稀有度（目录名，如 "SSS", "A"）
-        Returns:
-            加载的卡牌数量
-        """
         cards_json_path = os.path.join(self.BASE_PATH, rarity, "cards.json")
         
         if not os.path.exists(cards_json_path):
@@ -149,13 +139,10 @@ class CardDatabase:
     def get_card_by_path(self, image_path):
         """根据图片路径获取卡牌"""
         normalized_path = image_path.replace('\\', '/')
-        # 先查映射表
-        card_id = self.path_to_id_map.get(normalized_path)
+        card_id = self.path_to_id_map.get(normalized_path) # 先查映射表
         if card_id:
             card = self.cards.get(card_id)
             return card
-        
-        print(f"[DEBUG] ✗ 未找到卡牌")
         return None
     
     def get_cards_by_rarity(self, rarity):
@@ -167,15 +154,8 @@ class CardDatabase:
         return list(self.cards.values())
     
     def save_rarity_cards(self, rarity):
-        """
-        保存指定稀有度的卡牌到对应的 cards.json
-        Args:
-            rarity: 稀有度（如 "SSS", "A"）
-        """
         cards_json_path = os.path.join(self.BASE_PATH, rarity, "cards.json")
-        
-        # 获取该稀有度的所有卡牌
-        cards = self.get_cards_by_rarity(rarity)
+        cards = self.get_cards_by_rarity(rarity) # 获取该稀有度的所有卡牌
         
         if not cards:
             print(f"稀有度 {rarity} 没有卡牌需要保存")
@@ -212,21 +192,11 @@ class CardDatabase:
             print(f"卡牌 {card_id} 已更新")
             return True
         return False
-    
-    def print_summary(self):
-        """打印数据库摘要"""
-        print("\n=== 卡牌数据库摘要 ===")
-        for rarity in self.RARITY_DIRS:
-            cards = self.get_cards_by_rarity(rarity)
-            if cards:
-                print(f"{rarity}: {len(cards)} 张")
-        print(f"总计: {len(self.cards)} 张\n")
-
 
 # 全局卡牌数据库实例
 _card_database = None
+"""获取全局卡牌数据库实例"""
 def get_card_database():
-    """获取全局卡牌数据库实例"""
     global _card_database
     if _card_database is None:
         _card_database = CardDatabase()

@@ -7,6 +7,11 @@ from game.card_system import CardSystem
 from utils.inventory import get_inventory
 from config import *
 
+# 卡牌设置
+CARD_WIDTH = 360  #原720
+CARD_HEIGHT = 540 #原1080
+CARD_SPACING = 40
+
 """抽卡场景"""
 class GachaScene(BaseScene):
     def __init__(self, screen):

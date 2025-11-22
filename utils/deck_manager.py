@@ -6,9 +6,8 @@ import json
 import os
 from datetime import datetime
 
+"""卡组管理类"""
 class DeckManager:
-    """卡组管理类"""
-    
     SAVE_FILE = "data/deck.json"
     MAX_DECK_SIZE = 12  # 卡组最大卡牌数量
     

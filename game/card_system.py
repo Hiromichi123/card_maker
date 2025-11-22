@@ -4,8 +4,19 @@ import pygame
 from config import *
 from utils.card_database import get_card_database, CardData
 
+# 抽卡参数
+CARD_WIDTH = 360  #原720
+CARD_HEIGHT = 540 #原1080
+CARD_SPACING = 40
+CARDS_PER_ROW = 5
+TOTAL_CARDS = 10
+# 动画设置
+ANIMATION_DURATION = 0.5  # 秒
+CARD_FLIP_DURATION = 0.3  # 秒
+STAGGER_DELAY = 0.1       # 每张卡片之间的延迟
+
+"""卡牌类"""
 class Card:
-    """卡牌类"""
     def __init__(self, image_path, level_dir, position, index):
         """
         Args:
@@ -43,7 +54,6 @@ class Card:
                     image_path=image_path
                 )
             except:
-                print(f"创建默认卡牌数据失败: {e}")
                 self.card_data = CardData(
                     card_id=f"unknown_{index}",
                     name="未知卡牌",
@@ -95,7 +105,7 @@ class Card:
         surface = pygame.Surface((CARD_WIDTH, CARD_HEIGHT))
         
         # 使用稀有度颜色
-        color = RARITY_COLORS.get(self.card_data.rarity, (100, 100, 100))
+        color = COLORS.get(self.card_data.rarity, (100, 100, 100))
         surface.fill(color)
         
         pygame.draw.rect(surface, (255, 255, 255), 
@@ -168,7 +178,7 @@ class Card:
         surface = pygame.Surface((CARD_WIDTH + glow_margin * 2, 
                                  CARD_HEIGHT + glow_margin * 2), 
                                 pygame.SRCALPHA)
-        color = RARITY_COLORS.get(self.card_data.rarity, (255, 255, 255))
+        color = COLORS.get(self.card_data.rarity, (255, 255, 255))
         border_width = max(5, int(5 * UI_SCALE))
         pygame.draw.rect(surface, (*color, 100), 
                         (0, 0, CARD_WIDTH + glow_margin * 2, 

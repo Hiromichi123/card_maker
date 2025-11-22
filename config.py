@@ -1,37 +1,19 @@
-"""
-    全局配置文件
-"""
+"""全局配置文件"""
 import ctypes
 import pygame
 import os
 import sys
 
-# 高DPI适配（仅Windows）
-try:
-    ctypes.windll.user32.SetProcessDPIAware()
-except:
-    pass
-
 # 窗口设置
 WINDOW_WIDTH = 2880
-WINDOW_HEIGHT = 1620
+WINDOW_HEIGHT = 1800
 FPS = 90
 BACKGROUND_COLOR = (30, 30, 50)
+UI_SCALE = 1.0 # UI缩放因子
 
-# UI缩放因子
-UI_SCALE = 1.0
+CARD_BASE_PATH = "assets/outputs" # 卡牌路径
 
-# 抽卡设置
-CARD_WIDTH = 360  #原720
-CARD_HEIGHT = 540 #原1080
-CARD_SPACING = 40
-CARDS_PER_ROW = 5
-TOTAL_CARDS = 10
-
-# 卡牌路径
-CARD_BASE_PATH = "assets/outputs"
-
-# 抽卡概率配置（使用等级而非字母）
+# 概率配置
 CARD_PROBABILITIES = {
     "SSS": 0.5,  # SSS - 0.5%
     "SS": 2,     # SS - 2%
@@ -52,24 +34,23 @@ COLORS = {
     "C": (0, 255, 0),      # 绿色 - C
     "D": (205, 205, 205)   # 灰色 - D
 }
-RARITY_COLORS = COLORS
 
-# 动画设置
-ANIMATION_DURATION = 0.5  # 秒
-CARD_FLIP_DURATION = 0.3  # 秒
-STAGGER_DELAY = 0.1       # 每张卡片之间的延迟
+# 高DPI适配（仅Windows）
+try:
+    ctypes.windll.user32.SetProcessDPIAware()
+except:
+    pass
 
-# 按钮设置（基础值）
+# 基础按钮设置
 BASE_BUTTON_WIDTH = 300
 BASE_BUTTON_HEIGHT = 90
 BUTTON_COLOR = (100, 150, 255)
 BUTTON_HOVER_COLOR = (130, 180, 255)
 BUTTON_TEXT_COLOR = (255, 255, 255)
-
-# 实际按钮尺寸（运行时计算）
+# 实际按钮
 BUTTON_WIDTH = BASE_BUTTON_WIDTH
 BUTTON_HEIGHT = BASE_BUTTON_HEIGHT
-BUTTON_POSITION = (0, 0)  # 运行时计算
+BUTTON_POSITION = (0, 0) 
 
 def update_ui_scale(screen_width, screen_height):
     """根据屏幕尺寸更新UI缩放"""
@@ -79,15 +60,10 @@ def update_ui_scale(screen_width, screen_height):
     WINDOW_WIDTH = screen_width
     WINDOW_HEIGHT = screen_height
     
-    # 基于1920x1080计算缩放比例
+    # 基于2880x1800计算缩放比例
     scale_x = screen_width / 2880
-    scale_y = screen_height / 1620
+    scale_y = screen_height / 1800
     UI_SCALE = min(scale_x, scale_y)
-    
-    # 更新卡牌尺寸
-    CARD_WIDTH = int(CARD_WIDTH * UI_SCALE)
-    CARD_HEIGHT = int(CARD_HEIGHT * UI_SCALE)
-    CARD_SPACING = int(CARD_SPACING * UI_SCALE)
     
     # 更新按钮尺寸
     BUTTON_WIDTH = int(BASE_BUTTON_WIDTH * UI_SCALE)

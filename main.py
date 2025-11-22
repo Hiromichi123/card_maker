@@ -3,7 +3,6 @@ import sys
 import ctypes
 import config
 from config import *
-
 # 导入场景
 from scenes.menu import MainMenuScene
 from scenes.gacha import GachaScene
@@ -13,16 +12,10 @@ from scenes.battle_menu import BattleMenuScene
 from scenes.battle import BattleScene
 from scenes.draft_scene import DraftScene
 
+"""场景管理器"""
 class SceneManager:
-    """场景管理器"""
     def __init__(self):
         pygame.init()
-        
-        try:
-            ctypes.windll.user32.SetProcessDPIAware() # 高DPI适配
-        except:
-            pass
-        
         # 创建窗口
         self.screen = pygame.display.set_mode((0, 0), 
                                              pygame.FULLSCREEN | 
@@ -40,14 +33,11 @@ class SceneManager:
         self.scenes = {}
         self.current_scene = None
         
-        # 注册场景
-        self.register_scenes()
+        self.register_scenes() # 注册场景
+        self.switch_scene("main_menu") # 切换到主菜单
         
-        # 切换到主菜单
-        self.switch_scene("main_menu")
-        
+    """注册所有场景"""
     def register_scenes(self):
-        """注册所有场景"""
         self.scenes["main_menu"] = MainMenuScene(self.screen)
         self.scenes["gacha"] = GachaScene(self.screen)
         self.scenes["collection"] = CollectionScene(self.screen)
