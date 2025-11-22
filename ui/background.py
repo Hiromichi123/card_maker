@@ -4,6 +4,7 @@ Background manager with parallax effect
 import pygame
 import math
 import os
+import random
 
 
 class ParallaxBackground:
@@ -64,7 +65,6 @@ class ParallaxBackground:
     
     def _add_stars(self, surface, count, color):
         """Add star-like particles"""
-        import random
         for _ in range(count):
             x = random.randint(0, self.width)
             y = random.randint(0, self.height)
@@ -79,7 +79,6 @@ class ParallaxBackground:
     
     def _add_circles(self, surface, count, color):
         """Add decorative circles"""
-        import random
         temp_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         
         for _ in range(count):

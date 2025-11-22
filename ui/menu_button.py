@@ -128,26 +128,40 @@ class MenuButton:
             tri_alpha = 100
             tri_color = (*self.color, tri_alpha)
         
-        # Create surface for triangles with alpha
-        tri_surf = pygame.Surface((screen.get_width(), screen.get_height()), pygame.SRCALPHA)
-        pygame.draw.polygon(tri_surf, tri_color, left_triangle_points)
-        pygame.draw.polygon(tri_surf, tri_color, right_triangle_points)
-        screen.blit(tri_surf, (0, 0))
+        # Create surface for triangles with alpha - only size needed for triangles
+        tri_width = int(60 * UI_SCALE)
+        tri_surf_left = pygame.Surface((tri_width, self.rect.height), pygame.SRCALPHA)
+        tri_surf_right = pygame.Surface((tri_width, self.rect.height), pygame.SRCALPHA)
         
-        # Draw text with optional glow
-        if self.is_hovered and self.glow_intensity > 0.3:
-            # Draw text glow
+        # Adjust points for local surface coordinates
+        left_local = [
+            (int(20 * UI_SCALE), self.rect.height // 2),
+            (int(40 * UI_SCALE), self.rect.height // 2 - self.triangle_size // 2),
+            (int(40 * UI_SCALE), self.rect.height // 2 + self.triangle_size // 2)
+        ]
+        right_local = [
+            (int(40 * UI_SCALE), self.rect.height // 2),
+            (int(20 * UI_SCALE), self.rect.height // 2 - self.triangle_size // 2),
+            (int(20 * UI_SCALE), self.rect.height // 2 + self.triangle_size // 2)
+        ]
+        
+        pygame.draw.polygon(tri_surf_left, tri_color, left_local)
+        pygame.draw.polygon(tri_surf_right, tri_color, right_local)
+        
+        screen.blit(tri_surf_left, (self.rect.left - tri_width, self.rect.top))
+        screen.blit(tri_surf_right, (self.rect.right, self.rect.top))
+        
+        # Draw text with optional glow (simplified for performance)
+        if self.is_hovered and self.glow_intensity > 0.5:
+            # Draw simple text shadow for glow effect
             glow_text = self.font.render(self.text, True, self.hover_color)
-            for offset_x in [-2, -1, 0, 1, 2]:
-                for offset_y in [-2, -1, 0, 1, 2]:
-                    if offset_x == 0 and offset_y == 0:
-                        continue
-                    glow_rect = self.text_rect.copy()
-                    glow_rect.x += offset_x
-                    glow_rect.y += offset_y
-                    glow_surf = glow_text.copy()
-                    glow_surf.set_alpha(int(80 * self.glow_intensity))
-                    screen.blit(glow_surf, glow_rect)
+            for offset in [(-1, -1), (1, -1), (-1, 1), (1, 1)]:
+                glow_rect = self.text_rect.copy()
+                glow_rect.x += offset[0] * 2
+                glow_rect.y += offset[1] * 2
+                glow_surf = glow_text.copy()
+                glow_surf.set_alpha(int(100 * self.glow_intensity))
+                screen.blit(glow_surf, glow_rect)
         
         # Draw main text
         screen.blit(self.text_surface, self.text_rect)

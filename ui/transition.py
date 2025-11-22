@@ -5,7 +5,17 @@ import pygame
 
 
 class Transition:
-    """转场效果类"""
+    """转场效果类
+    
+    Manages fade in/out transitions between scenes.
+    
+    Attributes:
+        is_transitioning: Whether a transition is currently active
+        transition_alpha: Current alpha value (0-255) for the fade effect
+        transition_direction: 1 for fade out, -1 for fade in
+        transition_speed: Rate of alpha change per second
+        on_complete: Callback function to call when transition completes
+    """
     
     def __init__(self):
         self.is_transitioning = False
