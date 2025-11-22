@@ -1,92 +1,55 @@
 """
-卡牌信息提示框 当鼠标悬停在卡牌上时显示详细信息
+卡牌信息提示框
+当鼠标悬停在卡牌上时显示详细信息
 """
 import pygame
-import threading
 import time
 from config import *
 
 """卡牌提示框类"""
 class CardTooltip:
     def __init__(self):
+        # 延迟显示
+        self.hover_start_time = None
+        self.show_delay = 0.1
+
         self.visible = False
         self.card_data = None
         self.position = (0, 0)
         self.surface = None
         
         # 提示框样式
-        self.padding = int(15 * UI_SCALE)
-        self.line_spacing = int(8 * UI_SCALE)
-        self.border_width = max(2, int(3 * UI_SCALE))
+        self.padding = int(20 * UI_SCALE)
+        self.line_spacing = int(10 * UI_SCALE)
+        self.border_width = max(3, int(3 * UI_SCALE))
         
         # 字体
-        self.title_font = get_font(max(18, int(28 * UI_SCALE)))
+        self.title_font = get_font(max(24, int(32 * UI_SCALE)))
         self.info_font = get_font(max(14, int(20 * UI_SCALE)))
         self.desc_font = get_font(max(12, int(18 * UI_SCALE)))
         
-        # 延迟显示
-        self.hover_start_time = None
-        self.show_delay = 0.3  # 悬停0.3秒后显示
-        
-        # 监控线程
-        self.monitor_thread = None
-        self.running = False
-        self.last_mouse_pos = (0, 0)
-    
-    def start_monitoring(self):
-        """启动鼠标监控线程"""
-        if not self.running:
-            self.running = True
-            self.monitor_thread = threading.Thread(target=self._monitor_mouse, daemon=True)
-            self.monitor_thread.start()
-    
-    def stop_monitoring(self):
-        """停止监控"""
-        self.running = False
-        if self.monitor_thread:
-            self.monitor_thread.join(timeout=1.0)
-    
-    def _monitor_mouse(self):
-        """监控鼠标位置（在线程中运行）"""
-        while self.running:
-            try:
-                # 检查 pygame 是否已初始化
-                if pygame.get_init():
-                    # 获取当前鼠标位置
-                    mouse_pos = pygame.mouse.get_pos()
-                    
-                    # 如果鼠标移动了，重置悬停计时
-                    if mouse_pos != self.last_mouse_pos:
-                        self.last_mouse_pos = mouse_pos
-                        if self.hover_start_time is not None:
-                            self.hover_start_time = time.time()
-            except:
-                pass  # 忽略错误，继续监控
-            
-            time.sleep(0.016)  # 约60fps
-    
+    """显示提示框"""  
     def show(self, card_data, mouse_pos):
-        """
-        显示提示框
-        Args:
-            card_data: CardData对象
-            mouse_pos: 鼠标位置
-        """
         if card_data is None:
             self.hide()
             return
         
+        current_time = time.time()
+        
         # 如果是新卡牌，重置计时
         if self.card_data != card_data:
-            self.hover_start_time = time.time()
+            self.hover_start_time = current_time
             self.card_data = card_data
             self.visible = False
         
+        # 更新鼠标位置（即使已经显示）
+        self.position = mouse_pos
+        
         # 检查是否达到延迟时间
-        if self.hover_start_time and time.time() - self.hover_start_time >= self.show_delay:
+        if self.hover_start_time and current_time - self.hover_start_time >= self.show_delay:
+            if not self.visible:
+                self._create_surface()
             self.visible = True
-            self.position = mouse_pos
-            self._create_surface()
     
     def hide(self):
         """隐藏提示框"""
@@ -100,23 +63,18 @@ class CardTooltip:
         if not self.card_data:
             return
         
-        # 准备文本
-        lines = []
-        
-        # 标题：名称和等级
-        title_text = f"{self.card_data.name} Lv.{self.card_data.level}"
-        title_surface = self.title_font.render(title_text, True, 
-                                               COLORS.get(self.card_data.rarity, (255, 255, 255)))
+        lines = [] # 准备文本
+        title_text = f"{self.card_data.name}" # 名称
+        title_surface = self.title_font.render(title_text, True, COLORS.get(self.card_data.rarity, (255, 255, 255)))
         lines.append(('title', title_surface))
         
         # 稀有度
-        rarity_names = {"A": "SSR", "B": "SR", "C": "R", "D": "N"}
-        rarity_text = f"稀有度: {rarity_names.get(self.card_data.rarity, self.card_data.rarity)}"
+        rarity_text = f"稀有度: {self.card_data.rarity}"
         rarity_surface = self.info_font.render(rarity_text, True, (200, 200, 200))
         lines.append(('info', rarity_surface))
         
-        # 属性：ATK/HP
-        stats_text = f"ATK: {self.card_data.atk}  |  HP: {self.card_data.hp}"
+        # 属性：ATK/HP/CD
+        stats_text = f"ATK: {self.card_data.atk}  |  HP: {self.card_data.hp}  |  CD: {self.card_data.cd}"
         stats_surface = self.info_font.render(stats_text, True, (255, 215, 100))
         lines.append(('info', stats_surface))
         
@@ -125,23 +83,16 @@ class CardTooltip:
         
         # 特性
         if self.card_data.traits:
-            traits_text = "特性: " + ", ".join(self.card_data.traits)
-            # 如果特性太长，分行
-            if len(traits_text) > 30:
-                lines.append(('desc', self.desc_font.render("特性:", True, (150, 255, 150))))
-                for trait in self.card_data.traits:
-                    trait_surface = self.desc_font.render(f"  • {trait}", True, (150, 255, 150))
-                    lines.append(('desc', trait_surface))
-            else:
-                traits_surface = self.desc_font.render(traits_text, True, (150, 255, 150))
-                lines.append(('desc', traits_surface))
+            traits_text = f"{self.card_data.traits}"
+            traits_surface = self.desc_font.render(traits_text, True, (150, 255, 150))
+            lines.append(('desc', traits_surface))
         
         # 描述（可能需要分行）
         if self.card_data.description:
             lines.append(('separator', None))
             desc_lines = self._wrap_text(self.card_data.description, 
                                         self.desc_font, 
-                                        int(300 * UI_SCALE))
+                                        int(30 * UI_SCALE))
             for desc_line in desc_lines:
                 desc_surface = self.desc_font.render(desc_line, True, (220, 220, 220))
                 lines.append(('desc', desc_surface))
@@ -206,7 +157,7 @@ class CardTooltip:
         if current_line:
             lines.append(' '.join(current_line))
         
-        return lines
+        return lines if lines else [text]
     
     def draw(self, screen):
         """绘制提示框"""
@@ -239,6 +190,10 @@ class CardTooltip:
         
         # 绘制提示框
         screen.blit(self.surface, (draw_x, draw_y))
+    
+    def stop_monitoring(self):
+        """停止监控，清理资源"""
+        self.hide()
 
 
 # 全局提示框实例
@@ -249,5 +204,4 @@ def get_tooltip():
     global _tooltip
     if _tooltip is None:
         _tooltip = CardTooltip()
-        _tooltip.start_monitoring()
     return _tooltip

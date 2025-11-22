@@ -29,9 +29,7 @@ class Card:
             try:
                 card_num = os.path.splitext(os.path.basename(image_path))[0]
                 card_id = f"{level_dir}_{card_num}"
-                
-                # 从 level_dir 推断等级
-                level = int(level_dir.replace('level', ''))
+                level = int(level_dir.replace('level', '')) # 从 level_dir 推断等级
                 
                 self.card_data = CardData(
                     card_id=card_id,
@@ -39,16 +37,20 @@ class Card:
                     level=level,
                     atk=0,
                     hp=0,
+                    cd=0,
                     traits=[],
                     description="该卡牌尚未在数据库中注册。",
                     image_path=image_path
                 )
             except:
-                # 如果解析失败，使用最基础的默认值
+                print(f"创建默认卡牌数据失败: {e}")
                 self.card_data = CardData(
                     card_id=f"unknown_{index}",
                     name="未知卡牌",
-                    level=6,  # 默认最低等级
+                    level=6,
+                    atk=0,
+                    hp=0,
+                    cd=0,
                     image_path=image_path
                 )
         
@@ -114,7 +116,7 @@ class Card:
         
         # ATK/HP
         font_small = get_font(max(12, int(16 * UI_SCALE)))
-        stats_text = font_small.render(f"ATK:{self.card_data.atk} HP:{self.card_data.hp}", 
+        stats_text = font_small.render(f"ATK:{self.card_data.atk} HP:{self.card_data.hp} CD:{self.card_data.cd}", 
                                        True, (255, 255, 255))
         stats_rect = stats_text.get_rect(center=(CARD_WIDTH // 2, CARD_HEIGHT * 3 // 4))
         surface.blit(stats_text, stats_rect)
@@ -252,17 +254,30 @@ class Card:
                     self.current_position[1] - glow_margin))
     
     def update_hover(self, mouse_pos):
-        """更新悬停状态"""
+        """
+        更新悬停状态
+        Args:
+            mouse_pos: 鼠标位置
+        """
+        # 只有翻转完成后才检测悬停
         if self.flip_progress >= 1.0:
-            was_hovered = self.is_hovered
-            self.is_hovered = (self.current_position[0] <= mouse_pos[0] <= self.current_position[0] + CARD_WIDTH and
-                             self.current_position[1] <= mouse_pos[1] <= self.current_position[1] + CARD_HEIGHT)
+            # 检查鼠标是否在卡牌矩形内
+            card_rect = pygame.Rect(
+                self.current_position[0],
+                self.current_position[1],
+                CARD_WIDTH,
+                CARD_HEIGHT
+            )
             
+            self.is_hovered = card_rect.collidepoint(mouse_pos)
+            
+            # 如果悬停，持续调用 show（tooltip 内部会处理延迟）
             if self.is_hovered:
                 from ui.tooltip import get_tooltip
                 tooltip = get_tooltip()
                 tooltip.show(self.card_data, mouse_pos)
-            elif was_hovered and not self.is_hovered:
+            else:
+                # 离开时隐藏
                 from ui.tooltip import get_tooltip
                 tooltip = get_tooltip()
                 if tooltip.card_data == self.card_data:

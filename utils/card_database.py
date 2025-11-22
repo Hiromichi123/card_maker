@@ -1,16 +1,12 @@
 """
-卡牌数据库系统
-基于 assets/outputs 目录结构
-目录名直接对应稀有度 (SSS, SS, S, A, B, C, D)
+卡牌数据库系统 基于assets/outputs目录结构 目录名直接对应稀有度 (SSS, SS, S, A, B, C, D)
 """
 import json
 import os
 from collections import defaultdict
 
+"""卡牌数据类"""
 class CardData:
-    """卡牌数据类"""
-    
-    # 稀有度对应的默认等级（用于属性计算）
     RARITY_TO_LEVEL = {
         "SSS": 0,
         "SS": 1,
@@ -21,68 +17,29 @@ class CardData:
         "D": 6
     }
     
-    def __init__(self, card_id, name, rarity, atk=0, hp=0, traits=None, description="", image_path=""):
-        """
-        Args:
-            card_id: 卡牌ID（格式: SSS_001, A_002）
-            name: 卡牌名称
-            rarity: 稀有度 (SSS/SS/S/A/B/C/D)
-            atk: 攻击力（可选）
-            hp: 生命值（可选）
-            traits: 特性列表（可选）
-            description: 描述（可选）
-            image_path: 图片路径
-        """
+    def __init__(self, card_id, name, rarity, atk=0, hp=0, cd=0, traits=None, description="", image_path=""):
         self.card_id = card_id
         self.name = name
         self.rarity = rarity
         self.level = self.RARITY_TO_LEVEL.get(rarity, 3)  # 根据稀有度计算等级
-        
-        self.atk = atk if atk > 0 else self._default_atk_by_rarity(rarity)
-        self.hp = hp if hp > 0 else self._default_hp_by_rarity(rarity)
+        self.atk = atk
+        self.hp = hp
+        self.cd = cd
         self.traits = traits if traits else []
         self.description = description
-        self.image_path = image_path
-    
-    def _default_atk_by_rarity(self, rarity):
-        """根据稀有度返回默认攻击力"""
-        defaults = {
-            "SSS": 120,
-            "SS": 100,
-            "S": 80,
-            "A": 60,
-            "B": 40,
-            "C": 30,
-            "D": 20
-        }
-        return defaults.get(rarity, 30)
-    
-    def _default_hp_by_rarity(self, rarity):
-        """根据稀有度返回默认生命值"""
-        defaults = {
-            "SSS": 150,
-            "SS": 120,
-            "S": 100,
-            "A": 80,
-            "B": 60,
-            "C": 50,
-            "D": 40
-        }
-        return defaults.get(rarity, 50)
+        self.image_path = image_path  
     
     def to_dict(self):
         """转换为字典（用于保存）"""
         result = {
             "id": self.card_id.split('_')[-1],  # 只保存id部分，如 "001"
             "name": self.name,
-            "level": self.level
+            "level": self.level,
+            "atk": self.atk,
+            "hp": self.hp,
+            "cd": self.cd
         }
         
-        # 只保存非默认值
-        if self.atk != self._default_atk_by_rarity(self.rarity):
-            result["atk"] = self.atk
-        if self.hp != self._default_hp_by_rarity(self.rarity):
-            result["hp"] = self.hp
         if self.traits:
             result["traits"] = self.traits
         if self.description:
@@ -90,14 +47,9 @@ class CardData:
         
         return result
     
+    """从字典创建"""
     @staticmethod
     def from_dict(data, rarity):
-        """
-        从字典创建
-        Args:
-            data: cards.json 中的数据
-            rarity: 稀有度（目录名，如 "SSS", "A"）
-        """
         card_id = f"{rarity}_{data['id']}"
         image_path = f"assets/outputs/{rarity}/{data['id']}.png"
         
@@ -107,6 +59,7 @@ class CardData:
             rarity=rarity,
             atk=data.get("atk", 0),
             hp=data.get("hp", 0),
+            cd=data.get("cd", 0),
             traits=data.get("traits", []),
             description=data.get("description", ""),
             image_path=image_path
@@ -116,17 +69,14 @@ class CardData:
         """字符串表示"""
         traits_str = ", ".join(self.traits) if self.traits else "无"
         return (f"[{self.rarity}] {self.name} Lv.{self.level}\n"
-                f"ATK: {self.atk} | HP: {self.hp}\n"
-                f"特性: {traits_str}\n"
+                f"ATK: {self.atk} | HP: {self.hp} | CD: {self.cd}\n"
+                f"{traits_str}\n"
                 f"{self.description if self.description else '暂无描述'}")
 
 
 class CardDatabase:
     """卡牌数据库"""
-    
     BASE_PATH = "assets/outputs"
-    
-    # 定义稀有度目录（按稀有度从高到低）
     RARITY_DIRS = ["SSS", "SS", "S", "A", "B", "C", "D"]
     
     def __init__(self):
@@ -150,7 +100,6 @@ class CardDatabase:
             self.print_summary()
         else:
             print("警告: 未加载任何卡牌，请检查目录结构和 cards.json 文件")
-            print(f"期望路径: {self.BASE_PATH}/{{SSS,SS,S,A,B,C,D}}/cards.json")
     
     def load_rarity_cards(self, rarity):
         """
@@ -199,30 +148,14 @@ class CardDatabase:
     
     def get_card_by_path(self, image_path):
         """根据图片路径获取卡牌"""
-        # 规范化路径（统一使用正斜杠）
         normalized_path = image_path.replace('\\', '/')
-        
         # 先查映射表
         card_id = self.path_to_id_map.get(normalized_path)
         if card_id:
-            return self.cards.get(card_id)
+            card = self.cards.get(card_id)
+            return card
         
-        # 如果映射表没有，尝试从路径解析
-        # 例如: assets/outputs/SSS/001.png -> SSS_001
-        try:
-            parts = normalized_path.split('/')
-            if len(parts) >= 3 and parts[-3] == 'outputs':
-                rarity = parts[-2]
-                card_num = os.path.splitext(parts[-1])[0]
-                card_id = f"{rarity}_{card_num}"
-                card = self.cards.get(card_id)
-                if card:
-                    # 更新映射表
-                    self.path_to_id_map[normalized_path] = card_id
-                return card
-        except Exception as e:
-            print(f"解析路径失败: {image_path}, 错误: {e}")
-        
+        print(f"[DEBUG] ✗ 未找到卡牌")
         return None
     
     def get_cards_by_rarity(self, rarity):
@@ -248,11 +181,8 @@ class CardDatabase:
             print(f"稀有度 {rarity} 没有卡牌需要保存")
             return False
         
-        # 转换为字典列表
-        cards_data = [card.to_dict() for card in sorted(cards, key=lambda c: c.card_id)]
-        
-        # 确保目录存在
-        os.makedirs(os.path.dirname(cards_json_path), exist_ok=True)
+        cards_data = [card.to_dict() for card in sorted(cards, key=lambda c: c.card_id)] # 转换为字典列表
+        os.makedirs(os.path.dirname(cards_json_path), exist_ok=True) # 确保目录存在
         
         try:
             with open(cards_json_path, 'w', encoding='utf-8') as f:
@@ -295,7 +225,6 @@ class CardDatabase:
 
 # 全局卡牌数据库实例
 _card_database = None
-
 def get_card_database():
     """获取全局卡牌数据库实例"""
     global _card_database
