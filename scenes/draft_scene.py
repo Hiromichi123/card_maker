@@ -28,13 +28,6 @@ DRAFT_CENTER_Y_RATIO = 0.40   # 卡牌区域中心Y位置
 """Draft卡牌类"""
 class DraftCard:
     def __init__(self, card_data, x, y, width, height, index):
-        """
-        Args:
-            card_data: 卡牌数据
-            x, y: 位置
-            width, height: 尺寸
-            index: 在draft_pool中的索引
-        """
         self.data = card_data
         self.rect = pygame.Rect(x, y, width, height)
         self.index = index
@@ -49,6 +42,11 @@ class DraftCard:
         
         # 加载图片
         self.load_image()
+
+        # 从数据库加载完整的 CardData
+        from utils.card_database import get_card_database
+        db = get_card_database()
+        self.card_data = db.get_card_by_path(card_data.get('path'))
     
     def load_image(self):
         """加载卡牌图片"""
@@ -297,8 +295,18 @@ class DraftScene(BaseScene):
         self.initialize_draft_cards()
         self.initialized = True
     
+    """获取鼠标悬停的卡牌数据"""
+    def get_hovered_card(self, mouse_pos):
+        for draft_card in self.draft_cards:
+            if draft_card.rect.collidepoint(mouse_pos):
+                if hasattr(draft_card, 'card_data'):
+                    return draft_card.card_data
+        return None
+    
+    """处理事件"""
     def handle_event(self, event):
-        """处理事件"""
+        super().handle_event(event)
+
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 self.switch_to("main_menu")

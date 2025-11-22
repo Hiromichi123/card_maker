@@ -1,14 +1,10 @@
-"""
-战斗场景
-"""
+"""战斗场景"""
 import pygame
 import os
 from scenes.base_scene import BaseScene
 from ui.button import Button
 from ui.panel import Panel
 from config import *
-
-# ==================== 战斗场景配置 ====================
 
 # 背景设置
 BATTLE_BG_BRIGHTNESS = 0.7  # 背景亮度 (0.0-1.0)
@@ -49,23 +45,16 @@ HEALTH_BAR_HEIGHT = 50         # 血量条基础高度
 PLAYER_HEALTH_Y_RATIO = 0.85   # 玩家血量条Y位置
 ENEMY_HEALTH_Y_RATIO = 0.08    # 敌人血量条Y位置
 
-# ==================== 类定义 ====================
-
+"""卡牌槽位类"""
 class CardSlot:
-    """卡牌槽位类"""
-    
     def __init__(self, x, y, width, height, slot_type="battle"):
-        """
-        Args:
-            x, y: 槽位位置
-            width, height: 槽位尺寸
-            slot_type: 槽位类型 ("battle", "waiting", "discard")
-        """
         self.rect = pygame.Rect(x, y, width, height)
         self.slot_type = slot_type
         self.card = None  # 当前槽位的卡牌
         self.is_hovered = False
-        self.is_highlighted = False  # 是否高亮（可放置提示）
+        self.is_highlighted = False  # 是否可放置提示
+        from utils.card_database import get_card_database
+        self.card_database = get_card_database()
         
     def set_card(self, card):
         """放置卡牌"""
@@ -122,7 +111,6 @@ class CardSlot:
                 center = self.rect.center
                 radius = max(3, int(5 * UI_SCALE))
                 pygame.draw.circle(screen, (200, 200, 200, 100), center, radius)
-
 
 class HealthBar:
     """血量条类"""
@@ -191,7 +179,6 @@ class HealthBar:
         text_surface = font.render(hp_text, True, (255, 255, 255))
         text_rect = text_surface.get_rect(center=self.rect.center)
         screen.blit(text_surface, text_rect)
-
 
 class BattleScene(BaseScene):
     """战斗场景"""
@@ -434,9 +421,18 @@ class BattleScene(BaseScene):
         """结束回合"""
         print("回合结束")
         # TODO: 实现回合逻辑
-    
+
+    """获取鼠标悬停的卡牌数据"""
+    def get_hovered_card(self, mouse_pos):
+        for card in self.player_battle_slots + self.enemy_battle_slots + self.player_waiting_slots + self.enemy_waiting_slots:
+            if card.rect.collidepoint(mouse_pos):
+                if hasattr(card, 'card_data'):
+                    return card.card_data 
+     
+    """事件处理"""
     def handle_event(self, event):
-        """处理事件"""
+        super().handle_event(event)
+
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 self.switch_to("main_menu")

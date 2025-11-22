@@ -1,6 +1,4 @@
-"""
-抽卡场景
-"""
+"""抽卡场景"""
 import pygame
 from streamlit import event
 from scenes.base_scene import BaseScene
@@ -9,12 +7,10 @@ from game.card_system import CardSystem
 from utils.inventory import get_inventory
 from config import *
 
+"""抽卡场景"""
 class GachaScene(BaseScene):
-    """抽卡场景"""
-    
     def __init__(self, screen):
         super().__init__(screen)
-        
         self.background = self.create_background() # 创建背景
         self.card_system = CardSystem() # 卡牌系统
         self.inventory = get_inventory() # 库存系统
@@ -74,18 +70,34 @@ class GachaScene(BaseScene):
             cards_to_save = [(card.image_path, card.rarity) 
                             for card in self.card_system.cards]
             self.inventory.add_cards(cards_to_save)
+
+    """获取鼠标悬停的卡牌数据"""
+    def get_hovered_card(self, mouse_pos):
+        for card in self.card_system.cards:
+            # 只检测已经翻开的卡牌（动画完成）
+            if card.flip_progress >= 1.0:
+                # 创建卡牌的矩形区域
+                card_rect = pygame.Rect(
+                    card.current_position[0],
+                    card.current_position[1],
+                    CARD_WIDTH,
+                    CARD_HEIGHT
+                )
+                
+                # 检测鼠标是否在卡牌范围内
+                if card_rect.collidepoint(mouse_pos):
+                    return card.card_data
+        return None
     
     """处理事件"""
     def handle_event(self, event):
+        super().handle_event(event)
+
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 self.switch_to("main_menu")
             elif event.key == pygame.K_SPACE:
                 self.draw_cards()
-        
-        # 鼠标移动 - 更新卡牌悬停
-        elif event.type == pygame.MOUSEMOTION:
-            self.card_system.update_hover(event.pos)
 
         # 按钮事件
         self.draw_button.handle_event(event)
@@ -103,11 +115,6 @@ class GachaScene(BaseScene):
         self.draw_button.draw(self.screen) # 抽卡按钮
         self.back_button.draw(self.screen) # 返回按钮
         self.draw_probability_info() # 概率信息
-
-        # 提示框
-        from ui.tooltip import get_tooltip
-        tooltip = get_tooltip()
-        tooltip.draw(self.screen)
     
     def draw_title(self):
         """绘制标题"""

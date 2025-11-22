@@ -36,13 +36,6 @@ cards_per_row = 6
 """可拖拽的卡牌类"""
 class DraggableCard:
     def __init__(self, card_data, x, y, width, height, source="collection"):
-        """
-        Args:
-            card_data: 卡牌数据
-            x, y: 位置
-            width, height: 尺寸
-            source: 来源 ("collection" 或 "deck")
-        """
         self.data = card_data
         self.rect = pygame.Rect(x, y, width, height)
         self.original_pos = (x, y)  # 原始位置
@@ -51,9 +44,12 @@ class DraggableCard:
         self.is_hovered = False
         self.is_dragging = False
         self.drag_offset = (0, 0)
+
+        from utils.card_database import get_card_database
+        db = get_card_database()
+        self.card_data = db.get_card_by_path(card_data.get('path'))
         
-        # 加载图片
-        self.load_image()
+        self.load_image() # 加载图片
     
     def load_image(self):
         """加载卡牌图片"""
@@ -124,7 +120,6 @@ class DraggableCard:
             border_width = max(3, int(4 * UI_SCALE))
             border_color = COLORS.get(self.data.get("rarity", "D"), (255, 255, 255))
             pygame.draw.rect(surface, border_color, self.rect, border_width)
-
 
 class DeckSlot:
     """卡组槽位类"""
@@ -308,8 +303,7 @@ class DeckBuilderScene(BaseScene):
             if i < len(self.deck_slots):
                 self.deck_slots[i].set_card(card_data)
         
-        # 加载收藏的卡牌
-        collection_data = self.inventory.get_unique_cards()
+        collection_data = self.inventory.get_unique_cards() # 加载收藏的卡牌
         
         # 按稀有度排序
         rarity_order = {"SSS": 0, "SS": 1, "S": 2, "A": 3, "B": 4, "C": 5, "D": 6}
@@ -338,8 +332,7 @@ class DeckBuilderScene(BaseScene):
     
     def save_deck(self):
         """保存卡组"""
-        # 清空卡组管理器
-        self.deck_manager.clear()
+        self.deck_manager.clear() # 清空卡组管理器
         
         # 添加所有槽位中的卡牌
         for slot in self.deck_slots:
@@ -363,9 +356,31 @@ class DeckBuilderScene(BaseScene):
         self.inventory.load()
         self.deck_manager.load()
         self.reload_cards()
-    
+
+    """获取鼠标悬停的卡牌数据"""
+    def get_hovered_card(self, mouse_pos):
+        # 检查鼠标是否在滚动视图区域内
+        if not self.scroll_view.rect.collidepoint(mouse_pos):
+            return None
+        
+        # 转换鼠标坐标到滚动内容坐标系
+        local_x = mouse_pos[0] - self.scroll_view.rect.x
+        local_y = mouse_pos[1] - self.scroll_view.rect.y
+        
+        # 遍历卡牌，考虑滚动偏移
+        for card in self.collection_cards:
+            # 调整卡牌矩形位置（减去滚动偏移）
+            adjusted_rect = card.rect.move(0, -self.scroll_view.scroll_y)
+            
+            # 使用转换后的坐标检测
+            if adjusted_rect.collidepoint(local_x, local_y):
+                if hasattr(card, 'card_data'):
+                    return card.card_data
+                
+    """处理事件"""
     def handle_event(self, event):
-        """处理事件"""
+        super().handle_event(event)
+
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 self.switch_to("main_menu")

@@ -20,13 +20,13 @@ class CardTooltip:
         
         # 提示框样式
         self.padding = int(20 * UI_SCALE)
-        self.line_spacing = int(10 * UI_SCALE)
+        self.line_spacing = int(0 * UI_SCALE)
         self.border_width = max(3, int(3 * UI_SCALE))
         
         # 字体
-        self.title_font = get_font(max(24, int(32 * UI_SCALE)))
-        self.info_font = get_font(max(14, int(20 * UI_SCALE)))
-        self.desc_font = get_font(max(12, int(18 * UI_SCALE)))
+        self.title_font = get_font(max(24, int(35 * UI_SCALE)))
+        self.info_font = get_font(max(20, int(25 * UI_SCALE)))
+        self.desc_font = get_font(max(16, int(25 * UI_SCALE)))
         
     """显示提示框"""  
     def show(self, card_data, mouse_pos):
@@ -69,32 +69,33 @@ class CardTooltip:
         lines.append(('title', title_surface))
         
         # 稀有度
-        rarity_text = f"稀有度: {self.card_data.rarity}"
+        rarity_text = f"LV: {self.card_data.rarity}"
         rarity_surface = self.info_font.render(rarity_text, True, (200, 200, 200))
         lines.append(('info', rarity_surface))
+        lines.append(('separator', None)) # 分隔线
         
         # 属性：ATK/HP/CD
-        stats_text = f"ATK: {self.card_data.atk}  |  HP: {self.card_data.hp}  |  CD: {self.card_data.cd}"
-        stats_surface = self.info_font.render(stats_text, True, (255, 215, 100))
-        lines.append(('info', stats_surface))
-        
-        # 分隔线
-        lines.append(('separator', None))
+        atk_text = f"ATK: {self.card_data.atk}"
+        hp_text = f"HP: {self.card_data.hp}"
+        cd_text = f"CD: {self.card_data.cd}"
+        lines.append(('info', self.info_font.render(atk_text, True, (215, 0, 100))))
+        lines.append(('info', self.info_font.render(hp_text, True, (0, 215, 0))))
+        lines.append(('info', self.info_font.render(cd_text, True, (255, 215, 100))))
         
         # 特性
         if self.card_data.traits:
+            lines.append(('separator', None))
             traits_text = f"{self.card_data.traits}"
             traits_surface = self.desc_font.render(traits_text, True, (150, 255, 150))
             lines.append(('desc', traits_surface))
         
-        # 描述（可能需要分行）
+        # 描述（10字符换行）
         if self.card_data.description:
             lines.append(('separator', None))
-            desc_lines = self._wrap_text(self.card_data.description, 
-                                        self.desc_font, 
-                                        int(30 * UI_SCALE))
-            for desc_line in desc_lines:
-                desc_surface = self.desc_font.render(desc_line, True, (220, 220, 220))
+            desc_text = self.card_data.description
+            for i in range(0, len(desc_text), 10):
+                line_text = desc_text[i:i+10]
+                desc_surface = self.desc_font.render(line_text, True, (220, 220, 220))
                 lines.append(('desc', desc_surface))
         
         # 计算尺寸
@@ -126,8 +127,7 @@ class CardTooltip:
         # 绘制文本
         y = self.padding
         for line_type, surface in lines:
-            if line_type == 'separator':
-                # 分隔线
+            if line_type == 'separator': # 分隔线
                 sep_y = y + int(5 * UI_SCALE)
                 pygame.draw.line(self.surface, (100, 100, 100),
                                (self.padding, sep_y),
@@ -190,7 +190,7 @@ class CardTooltip:
         
         # 绘制提示框
         screen.blit(self.surface, (draw_x, draw_y))
-    
+
     def stop_monitoring(self):
         """停止监控，清理资源"""
         self.hide()

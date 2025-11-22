@@ -1,6 +1,4 @@
-"""
-图鉴场景 - 显示收集到的卡牌
-"""
+"""图鉴场景"""
 import pygame
 import os
 from scenes.base_scene import BaseScene
@@ -19,18 +17,15 @@ card_spacing = int(30 * UI_SCALE)
 """图鉴卡牌显示类"""
 class CollectionCard:
     def __init__(self, card_data, x, y, width, height):
-        """
-        Args:
-            card_data: 卡牌数据 {"path": ..., "rarity": ..., "count": ...}
-            x, y: 位置
-            width, height: 尺寸
-        """
         self.data = card_data
         self.rect = pygame.Rect(x, y, width, height)
         self.is_hovered = False
-        
-        # 加载图片
-        self.load_image()
+
+        from utils.card_database import get_card_database
+        db = get_card_database()
+        self.card_data = db.get_card_by_path(card_data.get('path'))
+
+        self.load_image() # 加载图片
         
     def load_image(self):
         """加载卡牌图片"""
@@ -75,8 +70,7 @@ class CollectionCard:
         """绘制卡牌"""
         pos = (self.rect.x, self.rect.y + offset_y)
         
-        # 绘制图片
-        surface.blit(self.image, pos)
+        surface.blit(self.image, pos) # 绘制图片
         
         # 悬停效果
         if self.is_hovered:
@@ -121,9 +115,9 @@ class CollectionScene(BaseScene):
         self.background = self.create_background()  # 背景
         
         # 字体
-        self.title_font = get_font(max(32, int(64 * UI_SCALE)))
-        self.info_font = get_font(max(24, int(36 * UI_SCALE)))
-        self.small_font = get_font(max(18, int(24 * UI_SCALE)))
+        self.title_font = get_font(max(45, int(64 * UI_SCALE)))
+        self.info_font = get_font(max(30, int(40 * UI_SCALE)))
+        self.small_font = get_font(max(30, int(40 * UI_SCALE)))
         self.create_ui() # 创建UI
         
         # 卡牌显示相关
@@ -250,8 +244,30 @@ class CollectionScene(BaseScene):
         self.inventory.load()  # 重新加载库存
         self.reload_cards()
     
+    """获取鼠标悬停的卡牌数据"""
+    def get_hovered_card(self, mouse_pos):
+        # 检查鼠标是否在滚动视图区域内
+        if not self.scroll_view.rect.collidepoint(mouse_pos):
+            return None
+        
+        # 转换鼠标坐标到滚动内容坐标系
+        local_x = mouse_pos[0] - self.scroll_view.rect.x
+        local_y = mouse_pos[1] - self.scroll_view.rect.y
+        
+        # 遍历卡牌，考虑滚动偏移
+        for card in self.card_widgets:
+            # 调整卡牌矩形位置（减去滚动偏移）
+            adjusted_rect = card.rect.move(0, -self.scroll_view.scroll_y)
+            
+            # 使用转换后的坐标检测
+            if adjusted_rect.collidepoint(local_x, local_y):
+                if hasattr(card, 'card_data'):
+                    return card.card_data
+
+    """处理事件"""
     def handle_event(self, event):
-        """处理事件"""
+        super().handle_event(event)
+
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 self.switch_to("main_menu")

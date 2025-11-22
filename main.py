@@ -104,7 +104,7 @@ class SceneManager:
             
             # 绘制当前场景
             if self.current_scene:
-                self.current_scene.draw()
+                self.current_scene.draw_with_tooltip() # 绘制场景和提示框
             
             self.draw_fps() # 显示FPS
             pygame.display.flip()
