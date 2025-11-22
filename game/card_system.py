@@ -2,14 +2,59 @@ import os
 import random
 import pygame
 from config import *
+from utils.card_database import get_card_database, CardData
 
 class Card:
     """卡牌类"""
-    def __init__(self, image_path, rarity, position, index):
+    def __init__(self, image_path, level_dir, position, index):
+        """
+        Args:
+            image_path: 图片路径
+            level_dir: 等级目录（如 "level0"）
+            position: 位置
+            index: 索引
+        """
         self.image_path = image_path
-        self.rarity = rarity
+        self.level_dir = level_dir
         self.target_position = position
         self.index = index
+        
+        # 获取卡牌详细数据
+        self.card_database = get_card_database()
+        self.card_data = self.card_database.get_card_by_path(image_path)
+        
+        # 如果数据库中没有，创建默认数据
+        if not self.card_data:
+            # 从路径提取 card_id
+            try:
+                card_num = os.path.splitext(os.path.basename(image_path))[0]
+                card_id = f"{level_dir}_{card_num}"
+                
+                # 从 level_dir 推断等级
+                level = int(level_dir.replace('level', ''))
+                
+                self.card_data = CardData(
+                    card_id=card_id,
+                    name="未知卡牌",
+                    level=level,
+                    atk=0,
+                    hp=0,
+                    traits=[],
+                    description="该卡牌尚未在数据库中注册。",
+                    image_path=image_path
+                )
+            except:
+                # 如果解析失败，使用最基础的默认值
+                self.card_data = CardData(
+                    card_id=f"unknown_{index}",
+                    name="未知卡牌",
+                    level=6,  # 默认最低等级
+                    image_path=image_path
+                )
+        
+        # 方便访问的属性
+        self.rarity = self.card_data.rarity
+        self.level = self.card_data.level
         
         # 动画相关
         self.current_position = (position[0], -CARD_HEIGHT)
@@ -18,6 +63,9 @@ class Card:
         self.rotation = 0
         self.animation_progress = 0
         self.flip_progress = 0
+        
+        # 鼠标悬停
+        self.is_hovered = False
         
         # 缓存渲染的图片
         self.cached_surfaces = {}
@@ -43,27 +91,54 @@ class Card:
     def create_placeholder(self):
         """创建占位符图片"""
         surface = pygame.Surface((CARD_WIDTH, CARD_HEIGHT))
-        color = COLORS.get(self.rarity, (100, 100, 100))
+        
+        # 使用稀有度颜色
+        color = RARITY_COLORS.get(self.card_data.rarity, (100, 100, 100))
         surface.fill(color)
         
         pygame.draw.rect(surface, (255, 255, 255), 
                         (0, 0, CARD_WIDTH, CARD_HEIGHT), max(3, int(3 * UI_SCALE)))
         
-        # 使用中文字体
-        font_size = max(24, int(48 * UI_SCALE))
-        font = get_font(font_size)  # 修改这里
-        text = font.render(self.rarity, True, (255, 255, 255))
-        text_rect = text.get_rect(center=(CARD_WIDTH // 2, CARD_HEIGHT // 2))
-        surface.blit(text, text_rect)
+        # 使用数据库中的名称
+        font_size = max(16, int(24 * UI_SCALE))
+        font = get_font(font_size)
         
-        font_small_size = max(12, int(20 * UI_SCALE))
-        font_small = get_font(font_small_size)  # 修改这里
-        filename = os.path.basename(self.image_path)
-        text_small = font_small.render(filename, True, (255, 255, 255))
-        text_rect_small = text_small.get_rect(center=(CARD_WIDTH // 2, CARD_HEIGHT - int(20 * UI_SCALE)))
-        surface.blit(text_small, text_rect_small)
+        # 名称（可能需要换行）
+        name_lines = self._wrap_name(self.card_data.name, font, CARD_WIDTH - 20)
+        y_offset = CARD_HEIGHT // 4
+        for line in name_lines:
+            name_text = font.render(line, True, (255, 255, 255))
+            name_rect = name_text.get_rect(center=(CARD_WIDTH // 2, y_offset))
+            surface.blit(name_text, name_rect)
+            y_offset += int(30 * UI_SCALE)
+        
+        # ATK/HP
+        font_small = get_font(max(12, int(16 * UI_SCALE)))
+        stats_text = font_small.render(f"ATK:{self.card_data.atk} HP:{self.card_data.hp}", 
+                                       True, (255, 255, 255))
+        stats_rect = stats_text.get_rect(center=(CARD_WIDTH // 2, CARD_HEIGHT * 3 // 4))
+        surface.blit(stats_text, stats_rect)
+        
+        # 稀有度标记
+        rarity_text = font_small.render(f"[{self.card_data.rarity}]", True, (255, 255, 255))
+        rarity_rect = rarity_text.get_rect(center=(CARD_WIDTH // 2, int(CARD_HEIGHT * 0.9)))
+        surface.blit(rarity_text, rarity_rect)
         
         return surface
+    
+    def _wrap_name(self, name, font, max_width):
+        """名称换行"""
+        # 移除空格
+        name_no_space = name.replace(' ', '')
+        
+        # 如果名称较短，直接返回
+        test = font.render(name_no_space, True, (255, 255, 255))
+        if test.get_width() <= max_width:
+            return [name_no_space]
+        
+        # 否则分两行
+        mid = len(name_no_space) // 2
+        return [name_no_space[:mid], name_no_space[mid:]]
     
     def create_card_back(self):
         """创建卡背"""
@@ -78,7 +153,7 @@ class Card:
                          CARD_HEIGHT - border_margin * 2), border_width)
         
         font_size = max(18, int(36 * UI_SCALE))
-        font = get_font(font_size)  # 修改这里
+        font = get_font(font_size)
         text = font.render("?", True, (200, 200, 200))
         text_rect = text.get_rect(center=(CARD_WIDTH // 2, CARD_HEIGHT // 2))
         surface.blit(text, text_rect)
@@ -91,7 +166,7 @@ class Card:
         surface = pygame.Surface((CARD_WIDTH + glow_margin * 2, 
                                  CARD_HEIGHT + glow_margin * 2), 
                                 pygame.SRCALPHA)
-        color = COLORS.get(self.rarity, (255, 255, 255))
+        color = RARITY_COLORS.get(self.card_data.rarity, (255, 255, 255))
         border_width = max(5, int(5 * UI_SCALE))
         pygame.draw.rect(surface, (*color, 100), 
                         (0, 0, CARD_WIDTH + glow_margin * 2, 
@@ -175,23 +250,41 @@ class Card:
         screen.blit(glow_copy, 
                    (self.current_position[0] - glow_margin, 
                     self.current_position[1] - glow_margin))
+    
+    def update_hover(self, mouse_pos):
+        """更新悬停状态"""
+        if self.flip_progress >= 1.0:
+            was_hovered = self.is_hovered
+            self.is_hovered = (self.current_position[0] <= mouse_pos[0] <= self.current_position[0] + CARD_WIDTH and
+                             self.current_position[1] <= mouse_pos[1] <= self.current_position[1] + CARD_HEIGHT)
+            
+            if self.is_hovered:
+                from ui.tooltip import get_tooltip
+                tooltip = get_tooltip()
+                tooltip.show(self.card_data, mouse_pos)
+            elif was_hovered and not self.is_hovered:
+                from ui.tooltip import get_tooltip
+                tooltip = get_tooltip()
+                if tooltip.card_data == self.card_data:
+                    tooltip.hide()
 
-"""卡牌系统"""
+
 class CardSystem:
+    """卡牌系统"""
     def __init__(self):
         self.cards = []
         self.animation_start_time = 0
         self.is_animating = False
-    
-    """抽取卡牌"""
+        
     def draw_cards(self):
+        """抽取卡牌"""
         self.cards = []
         drawn_cards = []
         
         card_pool = self.get_card_pool()
         
         for i in range(TOTAL_CARDS):
-            rarity, card_path = self.draw_single_card(card_pool)
+            level_dir, card_path = self.draw_single_card(card_pool)
             row = i // CARDS_PER_ROW
             col = i % CARDS_PER_ROW
             
@@ -201,26 +294,29 @@ class CardSystem:
             
             position = (start_x + col * (CARD_WIDTH + CARD_SPACING), start_y)
             
-            card = Card(card_path, rarity, position, i)
+            card = Card(card_path, level_dir, position, i)
             drawn_cards.append(card)
         
         self.cards = drawn_cards
         self.animation_start_time = 0
         self.is_animating = True
         
-    """获取卡池"""  
+        return drawn_cards
+    
     def get_card_pool(self):
-        pool = {rarity: [] for rarity in CARD_PROBABILITIES.keys()}
+        """获取卡池"""
+        pool = {level_dir: [] for level_dir in CARD_PROBABILITIES.keys()}
         
-        for rarity in pool.keys():
-            rarity_path = os.path.join(CARD_BASE_PATH, rarity)
-            if os.path.exists(rarity_path):
-                files = [f for f in os.listdir(rarity_path) 
+        for level_dir in pool.keys():
+            level_path = os.path.join(CARD_BASE_PATH, level_dir)
+            if os.path.exists(level_path):
+                files = [f for f in os.listdir(level_path) 
                         if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
-                pool[rarity] = [os.path.join(rarity_path, f) for f in files]
+                pool[level_dir] = [os.path.join(level_path, f) for f in files]
             
-            if not pool[rarity]:
-                pool[rarity] = [f"{rarity}_placeholder_{i}.png" for i in range(5)]
+            # 如果没有找到图片，添加占位符
+            if not pool[level_dir]:
+                pool[level_dir] = [f"{level_dir}_placeholder_{i}.png" for i in range(5)]
         
         return pool
     
@@ -229,14 +325,15 @@ class CardSystem:
         rand = random.randint(1, 100)
         cumulative = 0
         
-        for rarity, probability in CARD_PROBABILITIES.items():
+        for level_dir, probability in CARD_PROBABILITIES.items():
             cumulative += probability
             if rand <= cumulative:
-                if card_pool[rarity]:
-                    card_path = random.choice(card_pool[rarity])
-                    return rarity, card_path
+                if card_pool[level_dir]:
+                    card_path = random.choice(card_pool[level_dir])
+                    return level_dir, card_path
         
-        return "D", random.choice(card_pool["D"])
+        # 默认返回最低等级
+        return "level6", random.choice(card_pool["level6"])
     
     def update(self, dt):
         """更新卡牌动画"""
@@ -253,3 +350,8 @@ class CardSystem:
         """绘制所有卡牌"""
         for card in self.cards:
             card.draw(screen)
+    
+    def update_hover(self, mouse_pos):
+        """更新所有卡牌的悬停状态"""
+        for card in self.cards:
+            card.update_hover(mouse_pos)

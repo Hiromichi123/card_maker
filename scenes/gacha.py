@@ -2,6 +2,7 @@
 抽卡场景
 """
 import pygame
+from streamlit import event
 from scenes.base_scene import BaseScene
 from ui.button import Button
 from game.card_system import CardSystem
@@ -82,6 +83,10 @@ class GachaScene(BaseScene):
             elif event.key == pygame.K_SPACE:
                 self.draw_cards()
         
+        # 鼠标移动 - 更新卡牌悬停
+        elif event.type == pygame.MOUSEMOTION:
+            self.card_system.update_hover(event.pos)
+
         # 按钮事件
         self.draw_button.handle_event(event)
         self.back_button.handle_event(event)
@@ -95,13 +100,14 @@ class GachaScene(BaseScene):
         self.screen.blit(self.background, (0, 0)) # 背景
         self.draw_title() # 标题
         self.card_system.draw(self.screen) # 卡牌
-        
-        # 按钮
-        self.draw_button.draw(self.screen)
-        self.back_button.draw(self.screen)
-        
-        # 概率信息
-        self.draw_probability_info()
+        self.draw_button.draw(self.screen) # 抽卡按钮
+        self.back_button.draw(self.screen) # 返回按钮
+        self.draw_probability_info() # 概率信息
+
+        # 提示框
+        from ui.tooltip import get_tooltip
+        tooltip = get_tooltip()
+        tooltip.draw(self.screen)
     
     def draw_title(self):
         """绘制标题"""

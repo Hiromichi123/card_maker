@@ -7,13 +7,12 @@ import os
 import random
 from config import CARD_BASE_PATH, CARD_PROBABILITIES
 
+"""自选卡牌管理类"""
 class DraftManager:
-    """自选卡牌管理类"""
-    
     TEMP_FILE = "data/draft_temp.json"
     TOTAL_CARDS = 28  # 总共28张卡牌
     CARDS_PER_PLAYER = 12  # 每位玩家12张
-    
+
     def __init__(self):
         self.draft_pool = []  # 可选卡池 [{"path": ..., "rarity": ..., "picked": False, "picked_by": None}, ...]
         self.player1_cards = []  # 玩家1（下方）选择的卡牌

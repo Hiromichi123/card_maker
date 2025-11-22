@@ -18,12 +18,12 @@ DRAFT_BG_ALPHA = 200
 # 卡牌布局设置
 card_width = int(216 * UI_SCALE) # Draft卡牌基础宽度
 card_height = int(324 * UI_SCALE) # Draft卡牌基础高度
-spacing_x = int(12 * UI_SCALE) # 水平间距
-spacing_y = int(15 * UI_SCALE) # 垂直间距
+spacing_x = int(25 * UI_SCALE) # 水平间距
+spacing_y = int(25 * UI_SCALE) # 垂直间距
 DRAFT_ROW_COUNTS = [9, 10, 9] # 三层布局 (9, 10, 9)
 
 # 位置配置
-DRAFT_CENTER_Y_RATIO = 0.45   # 卡牌区域中心Y位置
+DRAFT_CENTER_Y_RATIO = 0.40   # 卡牌区域中心Y位置
 
 """Draft卡牌类"""
 class DraftCard:

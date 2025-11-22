@@ -106,11 +106,15 @@ class SceneManager:
             if self.current_scene:
                 self.current_scene.draw()
             
-            # 显示FPS
-            self.draw_fps()
-            
+            self.draw_fps() # 显示FPS
             pygame.display.flip()
         
+        # 清理悬停框资源
+        from ui.tooltip import get_tooltip
+        tooltip = get_tooltip()
+        tooltip.stop_monitoring()
+        
+        # 退出
         pygame.quit()
         sys.exit()
     

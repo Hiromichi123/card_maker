@@ -1,15 +1,13 @@
 """
-卡牌信息提示框
-当鼠标悬停在卡牌上时显示详细信息
+卡牌信息提示框 当鼠标悬停在卡牌上时显示详细信息
 """
 import pygame
 import threading
 import time
 from config import *
 
+"""卡牌提示框类"""
 class CardTooltip:
-    """卡牌提示框类"""
-    
     def __init__(self):
         self.visible = False
         self.card_data = None
@@ -51,14 +49,19 @@ class CardTooltip:
     def _monitor_mouse(self):
         """监控鼠标位置（在线程中运行）"""
         while self.running:
-            # 获取当前鼠标位置
-            mouse_pos = pygame.mouse.get_pos()
-            
-            # 如果鼠标移动了，重置悬停计时
-            if mouse_pos != self.last_mouse_pos:
-                self.last_mouse_pos = mouse_pos
-                if self.hover_start_time is not None:
-                    self.hover_start_time = time.time()
+            try:
+                # 检查 pygame 是否已初始化
+                if pygame.get_init():
+                    # 获取当前鼠标位置
+                    mouse_pos = pygame.mouse.get_pos()
+                    
+                    # 如果鼠标移动了，重置悬停计时
+                    if mouse_pos != self.last_mouse_pos:
+                        self.last_mouse_pos = mouse_pos
+                        if self.hover_start_time is not None:
+                            self.hover_start_time = time.time()
+            except:
+                pass  # 忽略错误，继续监控
             
             time.sleep(0.016)  # 约60fps
     
