@@ -106,9 +106,28 @@ class BattleScene(BaseScene):
         self.draw_queue = []  # [(hand_manager, card_data, delay), ...]
         self.draw_timer = 0.0
 
-        # 初始化标志
-        self.battle_initialized = False
+        # 回合状态
+        self.current_turn = "player1"  # player1, player2
+        self.turn_phase = "prepare"    # prepare, battle, end
+        self.turn_number = 1           # 回合数
+        self.cards_played_this_turn = 0  # 本回合已出牌数
+        self.max_cards_per_turn = 1    # 每回合最多出牌数
+        self.load_turn_indicator_bg() # 回合指示器背景
         
+        # 自动模式
+        self.auto_mode = False         # 是否开启自动模式
+        self.auto_timer = 0.0          # 自动出牌计时器
+        self.auto_delay = 3.0          # 自动出牌延迟（秒）
+        
+        self.battle_initialized = False # 初始化标志
+    
+    """进入场景初始化"""
+    def enter(self):
+        super().enter()
+        if not self.battle_initialized:
+            self.initialize_battle()
+            self.battle_initialized = True
+
     def load_background(self):
         """加载背景图片"""
         if os.path.exists(self.background_image_path):
@@ -133,7 +152,7 @@ class BattleScene(BaseScene):
         else:
             print(f"背景图片不存在: {self.background_image_path}")
             return self.create_default_background()
-    
+
     def adjust_brightness(self, surface, brightness):
         """
         调整Surface亮度
@@ -210,8 +229,8 @@ class BattleScene(BaseScene):
             self.enemy_max_hp, self.enemy_current_hp, is_player=False
         )
     
+    """创建所有卡牌槽位"""
     def create_slots(self):
-        """创建所有卡牌槽位"""
         # 战斗区卡牌尺寸（应用UI缩放）
         battle_card_width = int(BATTLE_CARD_BASE_WIDTH * UI_SCALE)
         battle_card_height = int(BATTLE_CARD_BASE_HEIGHT * UI_SCALE)
@@ -234,14 +253,16 @@ class BattleScene(BaseScene):
         player_battle_y = int(WINDOW_HEIGHT * PLAYER_BATTLE_Y_RATIO)
         for i in range(BATTLE_SLOTS_COUNT):
             x = battle_start_x + i * (battle_card_width + battle_card_spacing)
-            slot = CardSlot(x, player_battle_y, battle_card_width, battle_card_height, "battle")
+            slot = CardSlot(x, player_battle_y, battle_card_width, battle_card_height, 
+                          "battle", owner="player")
             self.player_battle_slots.append(slot)
         
         # 敌人战斗区（上方）
         enemy_battle_y = int(WINDOW_HEIGHT * ENEMY_BATTLE_Y_RATIO)
         for i in range(BATTLE_SLOTS_COUNT):
             x = battle_start_x + i * (battle_card_width + battle_card_spacing)
-            slot = CardSlot(x, enemy_battle_y, battle_card_width, battle_card_height, "battle")
+            slot = CardSlot(x, enemy_battle_y, battle_card_width, battle_card_height, 
+                          "battle", owner="enemy")
             self.enemy_battle_slots.append(slot)
         
         # === 等候区槽位（边缘一排）===
@@ -252,14 +273,16 @@ class BattleScene(BaseScene):
         player_waiting_y = int(WINDOW_HEIGHT * PLAYER_WAITING_Y_RATIO)
         for i in range(WAITING_SLOTS_COUNT):
             x = waiting_start_x + i * (waiting_card_width + waiting_card_spacing)
-            slot = CardSlot(x, player_waiting_y, waiting_card_width, waiting_card_height, "waiting")
+            slot = CardSlot(x, player_waiting_y, waiting_card_width, waiting_card_height, 
+                          "waiting", owner="player")
             self.player_waiting_slots.append(slot)
         
         # 敌人等候区（靠近敌人侧顶部）
         enemy_waiting_y = int(WINDOW_HEIGHT * ENEMY_WAITING_Y_RATIO)
         for i in range(WAITING_SLOTS_COUNT):
             x = waiting_start_x + i * (waiting_card_width + waiting_card_spacing)
-            slot = CardSlot(x, enemy_waiting_y, waiting_card_width, waiting_card_height, "waiting")
+            slot = CardSlot(x, enemy_waiting_y, waiting_card_width, waiting_card_height, 
+                          "waiting", owner="enemy")
             self.enemy_waiting_slots.append(slot)
         
         # === 弃牌堆（角落）===
@@ -295,6 +318,22 @@ class BattleScene(BaseScene):
             font_size=24,
             on_click=lambda: self.switch_to("main_menu")
         )
+
+        # 自动模式按钮（右侧中间偏上）
+        toggle_width = int(120 * UI_SCALE)
+        toggle_height = int(40 * UI_SCALE)
+        
+        self.auto_toggle_button = Button(
+            int(WINDOW_WIDTH * 0.85),
+            int(WINDOW_HEIGHT * 0.45),
+            toggle_width,
+            toggle_height,
+            "自动: 关",
+            color=(80, 80, 80),
+            hover_color=(100, 100, 100),
+            font_size=20,
+            on_click=self.toggle_auto_mode
+        )
         
         # 结束回合按钮（右侧中间）
         self.end_turn_button = Button(
@@ -308,11 +347,6 @@ class BattleScene(BaseScene):
             font_size=24,
             on_click=self.end_turn
         )
-    
-    def end_turn(self):
-        """结束回合"""
-        print("回合结束")
-        # TODO: 实现回合逻辑
 
     """获取鼠标悬停的卡牌数据"""
     def get_hovered_card(self, mouse_pos):
@@ -336,7 +370,7 @@ class BattleScene(BaseScene):
         
         for slot in all_slots:
             if slot.has_card() and slot.rect.collidepoint(mouse_pos):
-                return slot.card.card_data
+                return slot.card_data
         
         return None
      
@@ -346,19 +380,43 @@ class BattleScene(BaseScene):
 
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
+                self.player_hand.clear_selection()
                 self.switch_to("main_menu")
-
-        # 手牌事件（优先处理）
-        selected_card = self.player_hand.handle_event(event)
-        if selected_card:
-            print(f"选中卡牌: {selected_card.card_data.name}")
-        # TODO: 处理出牌逻辑
+        
+        # 手牌事件
+        action = self.player_hand.handle_event(event)
+        enemy_action = self.enemy_hand.handle_event(event)
+        
+        # 处理手牌点击（当前回合的owner）
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if self.current_turn == "player1" and action == "play":
+                selected = self.player_hand.get_selected_card()
+                if selected and self.can_play_card():
+                    self.play_card_to_waiting(selected)
+                    self.clear_slot_highlights()
+                elif not self.can_play_card():
+                    print("本回合已出过牌！")
+            
+            elif self.current_turn == "player2" and enemy_action == "play":
+                selected = self.enemy_hand.get_selected_card()
+                if selected and self.can_play_card():
+                    self.play_card_to_waiting(selected)
+                    self.clear_slot_highlights()
+                elif not self.can_play_card():
+                    print("本回合已出过牌！")
+            
+            elif action == "select" and self.current_turn == "player1" and self.can_play_card():
+                self.highlight_valid_slots()
+            
+            elif enemy_action == "select" and self.current_turn == "player2" and self.can_play_card():
+                self.highlight_valid_slots()
+            
+            elif action == "deselect" or enemy_action == "deselect":
+                self.clear_slot_highlights()
         
         # 鼠标移动
         if event.type == pygame.MOUSEMOTION:
             mouse_pos = event.pos
-            
-            # 更新槽位悬停
             all_slots = (
                 self.player_battle_slots + 
                 self.enemy_battle_slots + 
@@ -373,28 +431,45 @@ class BattleScene(BaseScene):
         # 按钮事件
         self.back_button.handle_event(event)
         self.end_turn_button.handle_event(event)
+        self.auto_toggle_button.handle_event(event)
     
+    """更新"""
     def update(self, dt):
-        """更新"""
         # 更新血量条动画
         self.player_health_bar.update(dt)
         self.enemy_health_bar.update(dt)
+        
         # 更新手牌动画
         self.player_hand.update(dt)
         self.enemy_hand.update(dt)
-
+        
         # 处理抽卡队列
         if self.draw_queue:
             self.draw_timer += dt
             
-            # 检查是否到时间抽卡
             while self.draw_queue and self.draw_timer >= self.draw_queue[0][1]:
                 who, _ = self.draw_queue.pop(0)
-                self.draw_card(who, animate=True)
+                success = self.draw_card(who, animate=True)
+        
+        # 自动模式
+        if self.auto_mode and self.can_play_card():
+            self.auto_timer += dt
+            
+            if self.auto_timer >= self.auto_delay:
+                played = self.auto_play_card() # 尝试自动出牌
+                
+                if played:
+                    self.auto_timer = 0.0
+                else: # 没有手牌或准备区满了，自动结束回合
+                    if self.auto_timer >= self.auto_delay * 2:
+                        print(f"[自动模式] 无法出牌，自动结束回合")
+                        self.end_turn()
+                        self.auto_timer = 0.0
         
     """绘制场景"""
     def draw(self):
         self.screen.blit(self.background, (0, 0)) # 背景
+        self.draw_turn_indicator() # 回合指示器
         self.draw_scene_labels() # 场景标识
         self.draw_health_bars() # 血量条
         self.draw_slots() # 槽位
@@ -407,6 +482,7 @@ class BattleScene(BaseScene):
         # 绘制按钮
         self.back_button.draw(self.screen)
         self.end_turn_button.draw(self.screen)
+        self.auto_toggle_button.draw(self.screen)
     
     def draw_scene_labels(self):
         """绘制场景标签（敌人区域/玩家区域提示）"""
@@ -494,13 +570,51 @@ class BattleScene(BaseScene):
         self.screen.blit(discard_label, (discard_x, discard_y))
         self.enemy_discard_slot.draw(self.screen)
 
-    """进入场景时初始化"""
-    def enter(self):
-        super().enter()
-    
-        if not self.battle_initialized:
-            self.initialize_battle()
-            self.battle_initialized = True
+    def draw_turn_indicator(self):
+        """绘制回合指示器"""
+        self.screen.blit(self.turn_bg, self.turn_bg_rect) # 背景图
+        
+        # 回合数
+        turn_font = get_font(max(32, int(48 * UI_SCALE)))
+        turn_text = turn_font.render(f"回合 {self.turn_number}", True, (255, 215, 0))
+        turn_rect = turn_text.get_rect(
+            centerx=self.turn_bg_rect.centerx,
+            top=self.turn_bg_rect.top + int(20 * UI_SCALE)
+        )
+        self.screen.blit(turn_text, turn_rect)
+        
+        # 当前玩家
+        player_font = get_font(max(20, int(28 * UI_SCALE)))
+        
+        if self.current_turn == "player1":
+            player_text = "玩家回合"
+            color = (100, 255, 100)
+        else:
+            player_text = "敌人回合"
+            color = (255, 100, 100)
+        
+        player_surface = player_font.render(player_text, True, color)
+        player_rect = player_surface.get_rect(
+            centerx=self.turn_bg_rect.centerx,
+            centery=self.turn_bg_rect.centery
+        )
+        self.screen.blit(player_surface, player_rect)
+        
+        # 出牌状态
+        status_font = get_font(max(16, int(20 * UI_SCALE)))
+        if self.can_play_card():
+            status_text = f"可出牌: {self.max_cards_per_turn - self.cards_played_this_turn}/{self.max_cards_per_turn}"
+            status_color = (200, 200, 255)
+        else:
+            status_text = "已出牌"
+            status_color = (150, 150, 150)
+        
+        status_surface = status_font.render(status_text, True, status_color)
+        status_rect = status_surface.get_rect(
+            centerx=self.turn_bg_rect.centerx,
+            bottom=self.turn_bg_rect.bottom - int(15 * UI_SCALE)
+        )
+        self.screen.blit(status_surface, status_rect)
 
     """初始化战斗"""
     def initialize_battle(self):
@@ -557,5 +671,210 @@ class BattleScene(BaseScene):
                 self.enemy_hand.add_card(card_data, animate=animate)
                 self.enemy_deck_renderer.set_count(len(self.enemy_deck))
                 return True
+        
+        return False
+    
+    """高亮显示可放置卡牌的槽位"""
+    def highlight_valid_slots(self):
+        # 高亮准备区空槽位
+        if self.turn_phase == "prepare":
+            for slot in self.player_waiting_slots:
+                if not slot.has_card():
+                    slot.is_highlighted = True
+    
+    """清除所有槽位高亮"""
+    def clear_slot_highlights(self):
+        all_slots = (
+            self.player_battle_slots + 
+            self.enemy_battle_slots + 
+            self.player_waiting_slots + 
+            self.enemy_waiting_slots + 
+            [self.player_discard_slot, self.enemy_discard_slot]
+        )
+        
+        for slot in all_slots:
+            slot.is_highlighted = False
+
+    """将手牌打出到等候区"""
+    def play_card_to_waiting(self, hand_card):
+        # 检查是否可以出牌
+        if not self.can_play_card():
+            return
+        
+        # 根据当前回合选择对应的准备区
+        if self.current_turn == "player1":
+            target_slots = self.player_waiting_slots
+            hand_manager = self.player_hand
+        else:  # player2
+            target_slots = self.enemy_waiting_slots
+            hand_manager = self.enemy_hand
+        
+        # 找到第一个空槽位
+        target_slot = None
+        for slot in target_slots:
+            if not slot.has_card():
+                target_slot = slot
+                break
+            
+        if target_slot:
+            target_slot.set_card(hand_card.card_data) # 放置卡牌
+            hand_manager.remove_card(hand_card) # 从手牌移除
+            self.cards_played_this_turn += 1 # 增加出牌计数
+        else:
+            print("准备区已满！")
+
+    """结束回合"""
+    def end_turn(self):
+        print("=== 回合结束 ===")
+        self.process_waiting_area() # 减少准备区卡牌的 CD
+        self.move_ready_cards_to_battle() # 将 CD 归零的卡牌移动到战斗区
+
+        # self.process_battle() # 战斗结算（下一步实现）
+
+        # 切换回合
+        if self.current_turn == "player1":
+            self.current_turn = "player2"
+            print(f"=== 切换到 player2 回合 ===")
+        else:
+            self.current_turn = "player1"
+            self.turn_number += 1
+            print(f"=== 新回合 {self.turn_number} 开始 ===")
+
+        self.cards_played_this_turn = 0 # 重置出牌计数
+        self.auto_timer = 0.0 # 重置自动出牌计时器
+    
+    """处理准备区 减少CD"""
+    def process_waiting_area(self):
+        # 处理双方的准备区
+        for slot in self.player_waiting_slots + self.enemy_waiting_slots:
+            if slot.has_card():
+                is_ready = slot.reduce_cd(1)
+                owner = "玩家" if slot.owner == "player" else "敌人"
+                if is_ready:
+                    print(f"[{owner}] {slot.card_data.name} CD 归零")
+                else:
+                    print(f"[{owner}] {slot.card_data.name} CD: {slot.cd_remaining}")
+    
+    """准备区CD归零的卡牌移动到战斗区"""
+    def move_ready_cards_to_battle(self):
+        # 处理玩家准备区
+        self._move_cards_from_waiting_to_battle(
+            self.player_waiting_slots, 
+            self.player_battle_slots,
+            "玩家"
+        )
+        
+        # 处理敌人准备区
+        self._move_cards_from_waiting_to_battle(
+            self.enemy_waiting_slots,
+            self.enemy_battle_slots,
+            "敌人"
+        )
+
+    def _move_cards_from_waiting_to_battle(self, waiting_slots, battle_slots, owner_name):
+        """辅助方法：从准备区移动到战斗区"""
+        ready_cards = []
+        for slot in waiting_slots:
+            if slot.has_card() and slot.cd_remaining == 0:
+                ready_cards.append((slot, slot.card_data))
+        
+        for waiting_slot, card_data in ready_cards:
+            # 找到战斗区第一个空槽位（从左到右）
+            target_slot = None
+            for battle_slot in battle_slots:
+                if not battle_slot.has_card():
+                    target_slot = battle_slot
+                    break
+            
+            if target_slot:
+                target_slot.set_card(card_data)
+                waiting_slot.remove_card()
+                print(f"  [{owner_name}] {card_data.name} 进入战斗区 (ATK:{card_data.atk}, HP:{card_data.hp})")
+            else:
+                print(f"  [{owner_name}] 战斗区已满，{card_data.name} 保留在准备区")
+                break
+
+    def load_turn_indicator_bg(self):
+        """加载回合指示器背景"""
+        import os
+        bg_path = "assets/turn_indicator_bg.png"
+        
+        if os.path.exists(bg_path):
+            try:
+                self.turn_bg = pygame.image.load(bg_path)
+                # 缩放到合适大小
+                bg_width = int(200 * UI_SCALE)
+                bg_height = int(150 * UI_SCALE)
+                self.turn_bg = pygame.transform.smoothscale(self.turn_bg, (bg_width, bg_height))
+            except:
+                self.turn_bg = self.create_default_turn_bg()
+        else:
+            self.turn_bg = self.create_default_turn_bg()
+        
+        # 位置（左侧中间）
+        self.turn_bg_rect = self.turn_bg.get_rect(
+            left=int(WINDOW_WIDTH * 0.02),
+            centery=int(WINDOW_HEIGHT * 0.5)
+        )
+    
+    def create_default_turn_bg(self):
+        """创建默认回合指示器背景"""
+        width = int(200 * UI_SCALE)
+        height = int(150 * UI_SCALE)
+        surface = pygame.Surface((width, height), pygame.SRCALPHA)
+        
+        # 渐变背景
+        for y in range(height):
+            ratio = y / height
+            color = (
+                int(30 + ratio * 50),
+                int(40 + ratio * 60),
+                int(80 + ratio * 80),
+                200
+            )
+            pygame.draw.line(surface, color, (0, y), (width, y))
+        
+        # 边框
+        pygame.draw.rect(surface, (150, 150, 200), (0, 0, width, height), 3,
+                        border_radius=int(10 * UI_SCALE))
+        
+        return surface
+
+    def toggle_auto_mode(self):
+        """切换自动模式"""
+        self.auto_mode = not self.auto_mode
+        
+        if self.auto_mode:
+            self.auto_toggle_button.text = "自动: 开"
+            self.auto_toggle_button.color = (50, 200, 50)
+            self.auto_toggle_button.hover_color = (80, 230, 80)
+            print("[自动模式] 已开启")
+        else:
+            self.auto_toggle_button.text = "自动: 关"
+            self.auto_toggle_button.color = (80, 80, 80)
+            self.auto_toggle_button.hover_color = (100, 100, 100)
+            print("[自动模式] 已关闭")
+    
+    def can_play_card(self):
+        """检查是否可以出牌"""
+        return self.cards_played_this_turn < self.max_cards_per_turn
+    
+    def auto_play_card(self):
+        """自动出牌（随机选择）"""
+        import random
+        
+        # 根据当前回合选择对应的手牌
+        if self.current_turn == "player1":
+            hand_manager = self.player_hand
+        else:  # player2
+            hand_manager = self.enemy_hand
+        
+        # 如果有手牌且可以出牌
+        if hand_manager.cards and self.can_play_card():
+            # 随机选择一张手牌
+            random_card = random.choice(hand_manager.cards)
+            self.play_card_to_waiting(random_card)
+            print(f"[自动模式] {self.current_turn} 自动出牌: {random_card.card_data.name}")
+            return True
         
         return False

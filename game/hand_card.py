@@ -149,15 +149,30 @@ class HandCard:
     def draw(self, screen):
         image = self.get_transformed_image()
         rect = image.get_rect(center=(int(self.position[0]), 
-                                     int(self.position[1] + self.y_offset)))
+                                    int(self.position[1] + self.y_offset)))
         screen.blit(image, rect)
         
-        # 高亮边框（悬停或选中时）
-        if self.is_hovered or self.is_selected:
-            border_color = (255, 255, 100) if self.is_selected else (255, 255, 255)
+        # 选中效果
+        if self.is_selected:
+            border_color = (255, 215, 0)
+            border_width = max(4, int(6 * UI_SCALE)) # 金色高亮边框
+            pygame.draw.rect(screen, border_color, rect, border_width, border_radius=max(5, int(8 * UI_SCALE))) # 绘制两层边框
+            
+            # 外层光晕
+            glow_rect = rect.inflate(10, 10)
+            glow_surface = pygame.Surface(glow_rect.size, pygame.SRCALPHA)
+            pygame.draw.rect(glow_surface, (255, 215, 0, 100), 
+                            glow_surface.get_rect(), 
+                            max(2, int(3 * UI_SCALE)),
+                            border_radius=max(8, int(12 * UI_SCALE)))
+            screen.blit(glow_surface, glow_rect.topleft)
+            
+        # 悬停效果（未选中时）
+        elif self.is_hovered:
+            border_color = (255, 255, 255)
             border_width = max(3, int(4 * UI_SCALE))
             pygame.draw.rect(screen, border_color, rect, border_width, 
-                           border_radius=max(5, int(8 * UI_SCALE)))
+                        border_radius=max(5, int(8 * UI_SCALE)))
 
     def start_draw_animation(self, from_pos):
         """开始抽卡动画"""
@@ -250,14 +265,21 @@ class HandManager:
             self.update_hover(mouse_pos)
             
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            # 点击选择/取消选择
+            mouse_pos = event.pos
+            # 检查是否点击了某张卡牌
             if self.hovered_card:
-                if self.selected_card == self.hovered_card:
-                    self.selected_card = None
-                else:
+                if self.selected_card == self.hovered_card: # 点击已选中的卡牌，取消选择
+                    return "play"  # 返回特出牌标记
+                else: # 点击其他卡牌，切换选择
+                    if self.selected_card:
+                        self.selected_card.is_selected = False # 取消之前的选择
                     self.selected_card = self.hovered_card
-                    self.selected_card.is_selected = True
+                    self.selected_card.is_selected = True # 选中新卡牌
                 return self.selected_card
+            else: # 点击空白区域，取消选择
+                if self.selected_card:
+                    self.selected_card.is_selected = False
+                    self.selected_card = None
         
         return None
     
@@ -285,8 +307,8 @@ class HandManager:
         for card in self.cards:
             card.update(dt)
     
+    """绘制手牌"""
     def draw(self, screen):
-        """绘制所有手牌（从左到右，后面的覆盖前面的）"""
         for card in self.cards:
             card.draw(screen)
     
@@ -312,3 +334,29 @@ class HandManager:
             hand_card.start_draw_animation(self.deck_position)
         
         return hand_card
+
+    def clear_selection(self):
+        """清除选择"""
+        if self.selected_card:
+            self.selected_card.is_selected = False
+            self.selected_card = None
+    
+    def get_selected_card(self):
+        """获取当前选中的卡牌"""
+        return self.selected_card
+    
+    def remove_card(self, card):
+        """移除手牌选择状态"""
+        if card in self.cards:
+            # 如果移除的是选中的卡牌，清除选择
+            if card == self.selected_card:
+                self.selected_card = None
+            
+            self.cards.remove(card)
+            
+            # 重新索引
+            for i, c in enumerate(self.cards):
+                c.index = i
+                c.total_cards = len(self.cards)
+            
+            self.update_card_positions()

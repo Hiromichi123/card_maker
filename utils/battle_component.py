@@ -4,35 +4,117 @@ from config import *
 
 """卡牌槽位类"""
 class CardSlot:
-    def __init__(self, x, y, width, height, slot_type="battle"):
+    def __init__(self, x, y, width, height, slot_type="battle", owner="player"):
         self.rect = pygame.Rect(x, y, width, height)
-        self.slot_type = slot_type
-        self.card = None  # 当前槽位的卡牌
+        self.slot_type = slot_type  # battle, waiting, discard
+        self.owner = owner  # player, enemy
+        self.card = None
+        self.card_data = None  # 存储 CardData
         self.is_hovered = False
-        self.is_highlighted = False  # 是否可放置提示
+        self.is_highlighted = False
+        
         from utils.card_database import get_card_database
         self.card_database = get_card_database()
         
-    def set_card(self, card):
-        """放置卡牌"""
-        self.card = card
+        # CD 倒计时（准备区使用）
+        self.cd_remaining = 0
+        
+    def set_card(self, card_data):
+        """
+        放置卡牌
+        Args:
+            card_data: CardData 对象
+        """
+        self.card_data = card_data
+        self.card = card_data  # 兼容性
+        
+        # 如果是准备区，初始化 CD
+        if self.slot_type == "waiting":
+            self.cd_remaining = card_data.cd
+        
+        # 加载卡牌图片
+        self.load_card_image()
+        
+    def load_card_image(self):
+        """加载卡牌图片"""
+        if not self.card_data:
+            self.card_image = None
+            return
+        
+        import os
+        try:
+            if os.path.exists(self.card_data.image_path):
+                original = pygame.image.load(self.card_data.image_path)
+                self.card_image = pygame.transform.smoothscale(
+                    original, (self.rect.width, self.rect.height)
+                )
+            else:
+                self.card_image = self.create_placeholder_image()
+        except:
+            self.card_image = self.create_placeholder_image()
+    
+    def create_placeholder_image(self):
+        """创建占位符图片"""
+        surface = pygame.Surface((self.rect.width, self.rect.height))
+        from config import COLORS
+        color = COLORS.get(self.card_data.rarity, (100, 100, 100))
+        surface.fill(color)
+        
+        from config import get_font, UI_SCALE
+        border_width = max(2, int(3 * UI_SCALE))
+        pygame.draw.rect(surface, (255, 255, 255), 
+                        (0, 0, self.rect.width, self.rect.height), border_width)
+        
+        font = get_font(max(16, int(24 * UI_SCALE)))
+        text = font.render(self.card_data.name[:4], True, (255, 255, 255))
+        text_rect = text.get_rect(center=(self.rect.width // 2, self.rect.height // 2))
+        surface.blit(text, text_rect)
+        
+        return surface
         
     def remove_card(self):
         """移除卡牌"""
-        card = self.card
+        card = self.card_data
         self.card = None
+        self.card_data = None
+        self.card_image = None
+        self.cd_remaining = 0
         return card
         
     def has_card(self):
         """是否有卡牌"""
-        return self.card is not None
+        return self.card_data is not None
+    
+    def reduce_cd(self, amount=1):
+        """减少CD 用于准备区"""
+        if self.slot_type == "waiting" and self.has_card():
+            self.cd_remaining = max(0, self.cd_remaining - amount)
+            return self.cd_remaining == 0
+        return False
         
     def draw(self, screen):
         """绘制槽位"""
-        # 槽位背景
-        if self.card:
-            # 有卡牌时不显示槽位框
-            pass
+        from config import get_font, UI_SCALE, COLORS
+        
+        if self.has_card():
+            # 有卡牌时绘制卡牌
+            if self.card_image:
+                screen.blit(self.card_image, self.rect)
+            
+            # 准备区：显示 CD
+            if self.slot_type == "waiting":
+                self.draw_cd_indicator(screen)
+            
+            # 战斗区：显示 ATK 和 HP
+            elif self.slot_type == "battle":
+                self.draw_stats(screen)
+            
+            # 悬停高亮
+            if self.is_hovered:
+                border_color = (255, 255, 100)
+                border_width = max(3, int(4 * UI_SCALE))
+                pygame.draw.rect(screen, border_color, self.rect, border_width,
+                               border_radius=max(5, int(8 * UI_SCALE)))
         else:
             # 空槽位
             alpha = 150 if self.is_highlighted else 80
@@ -62,12 +144,96 @@ class CardSlot:
                            border_width, border_radius=max(5, int(8 * UI_SCALE)))
             
             screen.blit(slot_surface, self.rect)
-            
-            # 空槽位提示（小圆点或图标）
-            if not self.card and self.slot_type == "battle":
-                center = self.rect.center
-                radius = max(3, int(5 * UI_SCALE))
-                pygame.draw.circle(screen, (200, 200, 200, 100), center, radius)
+    
+    def draw_cd_indicator(self, screen):
+        """绘制 CD 指示器（准备区上方）"""
+        from config import get_font, UI_SCALE
+        
+        # CD 背景框
+        cd_width = int(60 * UI_SCALE)
+        cd_height = int(40 * UI_SCALE)
+        cd_x = self.rect.centerx - cd_width // 2
+        cd_y = self.rect.top - cd_height - int(5 * UI_SCALE)
+        
+        cd_rect = pygame.Rect(cd_x, cd_y, cd_width, cd_height)
+        
+        # 背景
+        cd_surface = pygame.Surface((cd_width, cd_height), pygame.SRCALPHA)
+        
+        # 根据 CD 状态选择颜色
+        if self.cd_remaining == 0:
+            bg_color = (100, 255, 100, 200)  # 绿色：准备好
+            text_color = (0, 100, 0)
+        else:
+            bg_color = (255, 200, 100, 200)  # 橙色：冷却中
+            text_color = (100, 50, 0)
+        
+        cd_surface.fill(bg_color)
+        pygame.draw.rect(cd_surface, (255, 255, 255), 
+                        (0, 0, cd_width, cd_height), 2,
+                        border_radius=max(5, int(8 * UI_SCALE)))
+        
+        screen.blit(cd_surface, cd_rect)
+        
+        # CD 文字
+        font = get_font(max(14, int(20 * UI_SCALE)))
+        if self.cd_remaining == 0:
+            cd_text = "就绪"
+        else:
+            cd_text = f"CD:{self.cd_remaining}"
+        
+        text_surface = font.render(cd_text, True, text_color)
+        text_rect = text_surface.get_rect(center=cd_rect.center)
+        screen.blit(text_surface, text_rect)
+    
+    def draw_stats(self, screen):
+        """绘制属性（战斗区）- 只显示数字，无背景圆圈"""
+        from config import get_font, UI_SCALE
+        
+        # 调整字体大小（可根据需要修改）
+        font_size = max(18, int(28 * UI_SCALE))
+        font = get_font(font_size)
+        
+        # ATK（左下角红色）
+        atk_text = f"{self.card_data.atk}"
+        atk_surface = font.render(atk_text, True, (255, 50, 50))  # 红色
+        
+        # 添加黑色描边（让数字更清晰）
+        outline_font = font
+        outline_surfaces = [
+            outline_font.render(atk_text, True, (0, 0, 0))
+        ]
+        
+        atk_pos = (
+            self.rect.left + int(10 * UI_SCALE),
+            self.rect.bottom - int(30 * UI_SCALE)
+        )
+        
+        # 绘制描边
+        for dx, dy in [(-1, -1), (-1, 1), (1, -1), (1, 1)]:
+            screen.blit(outline_surfaces[0], (atk_pos[0] + dx, atk_pos[1] + dy))
+        
+        # 绘制主文字
+        screen.blit(atk_surface, atk_pos)
+        
+        # HP（右下角绿色）
+        hp_text = f"{self.card_data.hp}"
+        hp_surface = font.render(hp_text, True, (50, 255, 50))  # 绿色
+        
+        hp_outline = outline_font.render(hp_text, True, (0, 0, 0))
+        
+        hp_rect = hp_surface.get_rect()
+        hp_pos = (
+            self.rect.right - hp_rect.width - int(10 * UI_SCALE),
+            self.rect.bottom - int(30 * UI_SCALE)
+        )
+        
+        # 绘制描边
+        for dx, dy in [(-1, -1), (-1, 1), (1, -1), (1, 1)]:
+            screen.blit(hp_outline, (hp_pos[0] + dx, hp_pos[1] + dy))
+        
+        # 绘制主文字
+        screen.blit(hp_surface, hp_pos)
 
 """血量条类"""
 class HealthBar:
