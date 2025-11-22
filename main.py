@@ -11,6 +11,7 @@ from scenes.deck_builder_scene import DeckBuilderScene
 from scenes.battle_menu import BattleMenuScene
 from scenes.battle import BattleScene
 from scenes.draft_scene import DraftScene
+from ui.transition import Transition
 
 """场景管理器"""
 class SceneManager:
@@ -33,6 +34,10 @@ class SceneManager:
         self.scenes = {}
         self.current_scene = None
         
+        # 转场效果
+        self.transition = Transition()
+        self.pending_scene = None  # 等待切换的场景
+        
         self.register_scenes() # 注册场景
         self.switch_scene("main_menu") # 切换到主菜单
         
@@ -47,9 +52,22 @@ class SceneManager:
         self.scenes["draft_scene"] = DraftScene(self.screen)
         
     def switch_scene(self, scene_name):
-        """切换场景"""
+        """切换场景（带转场效果）"""
         if scene_name not in self.scenes:
             print(f"警告: 场景 '{scene_name}' 不存在")
+            return
+        
+        # 如果正在转场，忽略新的切换请求
+        if self.transition.is_transitioning:
+            return
+        
+        # 开始淡出转场
+        self.pending_scene = scene_name
+        self.transition.start_fade_out(on_complete=self._complete_scene_switch)
+    
+    def _complete_scene_switch(self):
+        """完成场景切换"""
+        if not self.pending_scene:
             return
         
         # 退出当前场景
@@ -57,10 +75,14 @@ class SceneManager:
             self.current_scene.exit()
         
         # 进入新场景
-        self.current_scene = self.scenes[scene_name]
+        self.current_scene = self.scenes[self.pending_scene]
         self.current_scene.enter()
         
-        print(f"切换到场景: {scene_name}")
+        print(f"切换到场景: {self.pending_scene}")
+        self.pending_scene = None
+        
+        # 开始淡入转场
+        self.transition.start_fade_in()
     
     def run(self):
         """主循环"""
@@ -74,20 +96,23 @@ class SceneManager:
                 if event.type == pygame.QUIT:
                     running = False
                 else:
-                    # 传递事件到当前场景
-                    if self.current_scene:
+                    # 传递事件到当前场景（如果不在转场中）
+                    if self.current_scene and not self.transition.is_transitioning:
                         self.current_scene.handle_event(event)
             
             # 检查主菜单的退出标志
             if hasattr(self.current_scene, 'quit_flag') and self.current_scene.quit_flag:
                 running = False
             
+            # 更新转场效果
+            self.transition.update(dt)
+            
             # 更新当前场景
             if self.current_scene:
                 self.current_scene.update(dt)
                 
                 # 检查是否需要切换场景
-                if self.current_scene.next_scene:
+                if self.current_scene.next_scene and not self.transition.is_transitioning:
                     next_scene = self.current_scene.next_scene
                     self.current_scene.next_scene = None
                     self.switch_scene(next_scene)
@@ -95,6 +120,9 @@ class SceneManager:
             # 绘制当前场景
             if self.current_scene:
                 self.current_scene.draw_with_tooltip() # 绘制场景和提示框
+            
+            # 绘制转场效果
+            self.transition.draw(self.screen)
             
             self.draw_fps() # 显示FPS
             pygame.display.flip()
