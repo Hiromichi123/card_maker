@@ -268,7 +268,7 @@ class HandManager:
             mouse_pos = event.pos
             # 检查是否点击了某张卡牌
             if self.hovered_card:
-                if self.selected_card == self.hovered_card: # 点击已选中的卡牌，取消选择
+                if self.selected_card == self.hovered_card:
                     return "play"  # 返回特出牌标记
                 else: # 点击其他卡牌，切换选择
                     if self.selected_card:
