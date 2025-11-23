@@ -17,18 +17,18 @@ STAGGER_DELAY = 0.1       # 每张卡片之间的延迟
 
 """卡牌类"""
 class Card:
-    def __init__(self, image_path, level_dir, position, index):
-        """
-        Args:
-            image_path: 图片路径
-            level_dir: 等级目录（如 "level0"）
-            position: 位置
-            index: 索引
-        """
+    def __init__(self, image_path, rarity, position, index):
         self.image_path = image_path
-        self.level_dir = level_dir
+        self.rarity = rarity
         self.target_position = position
         self.index = index
+        
+        # 加载图片
+        try:
+            self.image = pygame.image.load(self.image_path).convert_alpha()
+        except Exception as e:
+            self.image = pygame.Surface((200, 280))
+            self.image.fill((100, 100, 150))
         
         # 获取卡牌详细数据
         self.card_database = get_card_database()
@@ -36,33 +36,16 @@ class Card:
         
         # 如果数据库中没有，创建默认数据
         if not self.card_data:
-            # 从路径提取 card_id
-            try:
-                card_num = os.path.splitext(os.path.basename(image_path))[0]
-                card_id = f"{level_dir}_{card_num}"
-                level = int(level_dir.replace('level', '')) # 从 level_dir 推断等级
-                
-                self.card_data = CardData(
-                    card_id=card_id,
-                    name="未知卡牌",
-                    level=level,
-                    atk=0,
-                    hp=0,
-                    cd=0,
-                    traits=[],
-                    description="该卡牌尚未在数据库中注册。",
-                    image_path=image_path
-                )
-            except:
-                self.card_data = CardData(
-                    card_id=f"unknown_{index}",
-                    name="未知卡牌",
-                    level=6,
-                    atk=0,
-                    hp=0,
-                    cd=0,
-                    image_path=image_path
-                )
+            print(f"[card_system] 数据库中未找到卡牌数据: {self.image_path}")
+            self.card_data = CardData(
+                card_id=f"unknown_{index}",
+                name="未知卡牌",
+                rarity=6,
+                atk=0,
+                hp=0,
+                cd=0,
+                image_path=image_path
+            )
         
         # 方便访问的属性
         self.rarity = self.card_data.rarity

@@ -1,6 +1,5 @@
 import pygame
 import sys
-import ctypes
 import config
 from config import *
 # 导入场景

@@ -1,6 +1,4 @@
-"""
-战斗菜单场景
-"""
+"""战斗菜单场景"""
 import pygame
 from scenes.base_scene import BaseScene
 from ui.menu_button import MenuButton

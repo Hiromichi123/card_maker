@@ -1,7 +1,6 @@
 """"战斗组件类，包括卡牌槽位和血量条等"""
 import pygame
 from config import *
-from config import get_font, UI_SCALE, COLORS
 from game.card_animation import ShakeAnimation
 
 STATE_FONT_SIZE = int(60 * UI_SCALE)

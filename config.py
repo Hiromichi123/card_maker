@@ -11,7 +11,10 @@ FPS = 90
 BACKGROUND_COLOR = (30, 30, 50)
 UI_SCALE = 1.0 # UI缩放因子
 
-CARD_BASE_PATH = "assets/outputs" # 卡牌路径
+# 目录路径
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ASSETS_PATH = os.path.join(BASE_DIR, "assets") # 资源路径
+CARD_BASE_PATH = os.path.join(ASSETS_PATH, "outputs") # 卡牌路径
 
 # 概率配置
 CARD_PROBABILITIES = {
