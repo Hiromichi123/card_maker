@@ -1,22 +1,11 @@
-"""
-Background manager with parallax effect
-"""
+"""背景管理器，视差效果"""
 import pygame
-import math
 import os
 import random
 
-
+"""背景管理器"""
 class ParallaxBackground:
-    """Background with mouse-based parallax effect"""
-    
     def __init__(self, width, height, bg_type="menu"):
-        """
-        Args:
-            width: Screen width
-            height: Screen height
-            bg_type: Type of background ("menu" or "battle")
-        """
         self.width = width
         self.height = height
         self.bg_type = bg_type
@@ -27,7 +16,7 @@ class ParallaxBackground:
         self.target_offset_x = 0
         self.target_offset_y = 0
         
-        # Create or load background
+        # 加载或创建背景
         self.background = self.create_background()
         
         # Create larger surface for parallax effect
@@ -36,23 +25,24 @@ class ParallaxBackground:
         self.parallax_surface = pygame.transform.smoothscale(
             self.background, (self.parallax_width, self.parallax_height)
         )
-        
+
     def create_background(self):
-        """Create procedural background"""
-        bg = pygame.Surface((self.width, self.height))
+        """创建或加载背景"""
+        import os
+        bg_filename = f"assets/{self.bg_type}_bg.png" # 尝试从文件加载背景图片
         
-        if self.bg_type == "menu":
-            # Blue gradient background for main menu
+        if os.path.exists(bg_filename):
+            bg = pygame.image.load(bg_filename)
+            bg = pygame.transform.smoothscale(bg, (self.width, self.height))
+            return bg
+        else:
+            print(f"[Background] 文件不存在: {bg_filename}，使用程序化背景")
+            # 生成默认背景
+            bg = pygame.Surface((self.width, self.height))
             self._draw_gradient(bg, (20, 30, 60), (30, 50, 100))
             self._add_stars(bg, count=100, color=(100, 150, 255))
             self._add_circles(bg, count=5, color=(50, 100, 200, 30))
-        else:
-            # Red gradient background for battle menu
-            self._draw_gradient(bg, (60, 20, 30), (100, 30, 50))
-            self._add_stars(bg, count=100, color=(255, 100, 100))
-            self._add_circles(bg, count=5, color=(200, 50, 50, 30))
-        
-        return bg
+            return bg
     
     def _draw_gradient(self, surface, color1, color2):
         """Draw vertical gradient"""
@@ -96,14 +86,9 @@ class ParallaxBackground:
     
     def update_mouse_position(self, mouse_pos):
         """Update parallax based on mouse position"""
-        # Calculate offset based on mouse position (normalized to -1 to 1)
         center_x = self.width / 2
         center_y = self.height / 2
-        
-        # Maximum parallax offset
         max_offset = 50
-        
-        # Calculate target offset
         self.target_offset_x = ((mouse_pos[0] - center_x) / center_x) * max_offset
         self.target_offset_y = ((mouse_pos[1] - center_y) / center_y) * max_offset
     
@@ -126,19 +111,3 @@ class ParallaxBackground:
         # Blit the portion of parallax surface
         screen.blit(self.parallax_surface, (0, 0), 
                    pygame.Rect(src_x, src_y, self.width, self.height))
-
-
-def load_or_create_background(width, height, bg_type="menu"):
-    """Load background from file or create procedurally"""
-    filename = f"assets/{bg_type}_bg.png"
-    
-    if os.path.exists(filename):
-        try:
-            bg = pygame.image.load(filename)
-            bg = pygame.transform.smoothscale(bg, (width, height))
-            return bg
-        except:
-            pass
-    
-    # Create procedural background if file doesn't exist
-    return ParallaxBackground(width, height, bg_type).background

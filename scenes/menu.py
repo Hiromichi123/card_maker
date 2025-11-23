@@ -144,12 +144,12 @@ class MainMenuScene(BaseScene):
         self.background.draw(self.screen)
         
         # 绘制标题
-        title_text = self.title_font.render("卡牌战斗大师 模拟器", True, (255, 215, 0))
+        title_text = self.title_font.render("Card Battle Master Simulator v1.0", True, (255, 215, 0))
         title_rect = title_text.get_rect(center=(WINDOW_WIDTH // 2, int(WINDOW_HEIGHT * 0.12)))
         
         # 标题阴影
         shadow_offset = max(3, int(3 * UI_SCALE))
-        shadow_text = self.title_font.render("卡牌战斗大师 模拟器", True, (0, 0, 0))
+        shadow_text = self.title_font.render("Card Battle Master Simulator v1.0", True, (0, 0, 0))
         shadow_rect = shadow_text.get_rect(center=(WINDOW_WIDTH // 2 + shadow_offset, 
                                                    int(WINDOW_HEIGHT * 0.12) + shadow_offset))
         self.screen.blit(shadow_text, shadow_rect)

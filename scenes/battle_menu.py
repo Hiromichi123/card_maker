@@ -13,7 +13,7 @@ class BattleMenuScene(BaseScene):
         super().__init__(screen)
         
         # 创建视差背景
-        self.background = ParallaxBackground(WINDOW_WIDTH, WINDOW_HEIGHT, "battle")
+        self.background = ParallaxBackground(WINDOW_WIDTH, WINDOW_HEIGHT, "battle_menu")
         
         # 标题
         title_font_size = max(48, int(96 * UI_SCALE))

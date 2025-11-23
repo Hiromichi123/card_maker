@@ -56,6 +56,7 @@ ENEMY_HEALTH_Y_RATIO = 0.08    # 敌人血量条Y位置
 class BattleScene(BaseScene):
     def __init__(self, screen):
         super().__init__(screen)
+        self.battle_initialized = False # 初始化标志
         
         # 背景图片路径
         self.background_image_path = "assets/battle_bg.png"
@@ -70,9 +71,7 @@ class BattleScene(BaseScene):
         self.player_current_hp = 100
         self.enemy_max_hp = 100
         self.enemy_current_hp = 100
-        
-        # 创建血量条
-        self.create_health_bars()
+        self.create_health_bars() # 玩家血条
         
         # 卡牌槽位
         self.player_battle_slots = []  # 玩家战斗区
@@ -119,7 +118,14 @@ class BattleScene(BaseScene):
         self.auto_timer = 0.0          # 自动出牌计时器
         self.auto_delay = 3.0          # 自动出牌延迟（秒）
         
-        self.battle_initialized = False # 初始化标志
+        # 战斗状态
+        self.battle_in_progress = False  # 是否正在进行战斗结算
+        self.battle_animations = []      # 战斗动画队列
+        self.battle_timer = 0.0
+        
+        # 游戏结束状态
+        self.game_over = False
+        self.winner = None  # "player1" 或 "player2"
     
     """进入场景初始化"""
     def enter(self):
@@ -376,8 +382,13 @@ class BattleScene(BaseScene):
      
     """事件处理"""
     def handle_event(self, event):
+        # 游戏结束时只允许返回菜单
+        if self.game_over:
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                self.switch_to("main_menu")
+            return
+        
         super().handle_event(event)
-
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 self.player_hand.clear_selection()
@@ -435,6 +446,10 @@ class BattleScene(BaseScene):
     
     """更新"""
     def update(self, dt):
+        # 游戏结束时停止更新
+        if self.game_over:
+            return
+        
         # 更新血量条动画
         self.player_health_bar.update(dt)
         self.enemy_health_bar.update(dt)
@@ -483,6 +498,9 @@ class BattleScene(BaseScene):
         self.back_button.draw(self.screen)
         self.end_turn_button.draw(self.screen)
         self.auto_toggle_button.draw(self.screen)
+        # 游戏结束提示
+        if self.game_over:
+            self.draw_game_over_overlay()
     
     def draw_scene_labels(self):
         """绘制场景标签（敌人区域/玩家区域提示）"""
@@ -616,6 +634,34 @@ class BattleScene(BaseScene):
         )
         self.screen.blit(status_surface, status_rect)
 
+    def draw_game_over_overlay(self):
+        """绘制游戏结束遮罩"""
+        # 半透明黑色遮罩
+        overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        self.screen.blit(overlay, (0, 0))
+        
+        # 胜利/失败文字
+        result_font = get_font(max(48, int(72 * UI_SCALE)))
+        
+        if self.winner == "player1":
+            result_text = "胜利！"
+            result_color = (100, 255, 100)
+        else:
+            result_text = "失败..."
+            result_color = (255, 100, 100)
+        
+        result_surface = result_font.render(result_text, True, result_color)
+        result_rect = result_surface.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 - 50))
+        self.screen.blit(result_surface, result_rect)
+        
+        # 提示文字
+        hint_font = get_font(max(20, int(28 * UI_SCALE)))
+        hint_text = "按 ESC 返回主菜单"
+        hint_surface = hint_font.render(hint_text, True, (200, 200, 200))
+        hint_rect = hint_surface.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 + 50))
+        self.screen.blit(hint_surface, hint_rect)
+
     """初始化战斗"""
     def initialize_battle(self):
         draft_manager = get_draft_manager()
@@ -726,23 +772,34 @@ class BattleScene(BaseScene):
     """结束回合"""
     def end_turn(self):
         print("=== 回合结束 ===")
+        self.process_battle() # 先进行战斗结算
+        if self.check_game_over(): # 检查游戏结束
+            return
         self.process_waiting_area() # 减少准备区卡牌的 CD
         self.move_ready_cards_to_battle() # 将 CD 归零的卡牌移动到战斗区
-
-        # self.process_battle() # 战斗结算（下一步实现）
-
-        # 切换回合
+        self.switch_turn() # 切换回合
+    
+    """切换回合"""
+    def switch_turn(self):
         if self.current_turn == "player1":
             self.current_turn = "player2"
-            print(f"=== 切换到 player2 回合 ===")
+            print(f"切换到 player2 回合")
         else:
             self.current_turn = "player1"
             self.turn_number += 1
-            print(f"=== 新回合 {self.turn_number} 开始 ===")
-
+            print(f"新回合 {self.turn_number} 开始")
+        
         self.cards_played_this_turn = 0 # 重置出牌计数
-        self.auto_timer = 0.0 # 重置自动出牌计时器
-    
+        self.auto_timer = 0.0 # 重置自动计时器
+        
+        self.draw_card_for_turn() # 当前玩家抽一张卡
+
+    """回合开始时抽一张卡"""
+    def draw_card_for_turn(self):
+        who = self.current_turn.replace("player", "player")  # player1 或 player2
+        draw_who = "player" if who == "player1" else "enemy" # 转换为 draw_card 的参数格式
+        success = self.draw_card(draw_who, animate=True)
+
     """处理准备区 减少CD"""
     def process_waiting_area(self):
         # 处理双方的准备区
@@ -789,7 +846,6 @@ class BattleScene(BaseScene):
             if target_slot:
                 target_slot.set_card(card_data)
                 waiting_slot.remove_card()
-                print(f"  [{owner_name}] {card_data.name} 进入战斗区 (ATK:{card_data.atk}, HP:{card_data.hp})")
             else:
                 print(f"  [{owner_name}] 战斗区已满，{card_data.name} 保留在准备区")
                 break
@@ -878,3 +934,119 @@ class BattleScene(BaseScene):
             return True
         
         return False
+
+    """战斗结算"""
+    def process_battle(self):
+        print(f"\n{'='*20}")
+        print("战斗结算开始")
+        print(f"{'='*20}")
+        
+        # 当前回合的玩家发动攻击
+        if self.current_turn == "player1":
+            attacker_slots = self.player_battle_slots
+            defender_slots = self.enemy_battle_slots
+            attacker_name = "玩家"
+            defender_name = "敌人"
+            defender_hp_ref = "enemy"
+        else:
+            attacker_slots = self.enemy_battle_slots
+            defender_slots = self.player_battle_slots
+            attacker_name = "敌人"
+            defender_name = "玩家"
+            defender_hp_ref = "player"
+        
+        # 从左到右遍历攻击方的战斗区
+        for i, attacker_slot in enumerate(attacker_slots):
+            if not attacker_slot.has_card():
+                continue
+            
+            attacker_card = attacker_slot.card_data
+            defender_slot = defender_slots[i]
+            
+            print(f"\n[战斗] 槽位 {i+1}:")
+            print(f"攻击方: {attacker_name} - {attacker_card.name} (ATK:{attacker_card.atk})")
+            
+            # 检查对面槽位
+            if defender_slot.has_card():
+                # 对面有卡牌，攻击卡牌
+                defender_card = defender_slot.card_data
+                
+                # 造成伤害
+                new_hp = defender_card.hp - attacker_card.atk
+                defender_card.hp = new_hp
+                
+                print(f"  → {defender_card.name} 受到 {attacker_card.atk} 点伤害")
+                print(f"  → {defender_card.name} 剩余 HP: {defender_card.hp}")
+                
+                # 更新槽位中的卡牌数据（重要！）
+                defender_slot.card_data = defender_card
+            else:
+                # 对面没有卡牌，攻击玩家
+                print(f"  防御方: {defender_name} - 空槽位")
+                print(f"  → 直接攻击 {defender_name}，造成 {attacker_card.atk} 点伤害")
+                
+                # 对玩家造成伤害
+                if defender_hp_ref == "player":
+                    self.player_current_hp -= attacker_card.atk
+                    self.player_health_bar.set_hp(self.player_current_hp)
+                    print(f"  → 玩家 HP: {self.player_current_hp}/{self.player_max_hp}")
+                else:
+                    self.enemy_current_hp -= attacker_card.atk
+                    self.enemy_health_bar.set_hp(self.enemy_current_hp)
+                    print(f"  → 敌人 HP: {self.enemy_current_hp}/{self.enemy_max_hp}")
+        
+        # 清理死亡卡牌（HP <= 0 的卡牌送入弃牌堆）
+        print(f"\n{'='*20}")
+        print("清理死亡卡牌")
+        self.remove_dead_cards()
+        print("战斗结算结束")
+        print(f"{'='*20}\n")
+    
+    def remove_dead_cards(self):
+        """移除 HP <= 0 的卡牌到弃牌堆"""
+        # 检查所有战斗区槽位
+        all_battle_slots = self.player_battle_slots + self.enemy_battle_slots
+        
+        for slot in all_battle_slots:
+            if slot.has_card() and slot.card_data.hp <= 0:
+                card_name = slot.card_data.name
+                owner = "玩家" if slot.owner == "player" else "敌人"
+                
+                # 移除卡牌（送入弃牌堆的逻辑可以后续添加）
+                slot.remove_card()
+                
+                print(f"  [{owner}] {card_name} 被击败，送入弃牌堆")
+    
+    def check_game_over(self):
+        """检查游戏是否结束"""
+        if self.player_current_hp <= 0:
+            self.game_over = True
+            self.winner = "player2"
+            print(f"\n{'='*20}")
+            print("游戏结束！")
+            print("敌人获胜！")
+            print(f"{'='*20}\n")
+            self.show_game_over_screen()
+            return True
+        
+        elif self.enemy_current_hp <= 0:
+            self.game_over = True
+            self.winner = "player1"
+            print(f"\n{'='*20}")
+            print("游戏结束！")
+            print("玩家获胜！")
+            print(f"{'='*20}\n")
+            self.show_game_over_screen()
+            return True
+        
+        return False
+
+    def show_game_over_screen(self):
+        """显示游戏结束界面"""
+        # 简单实现：延迟后返回主菜单
+        # TODO: 可以添加更华丽的胜利/失败动画
+        print("[游戏结束] 3秒后返回主菜单...")
+        pygame.time.delay(3000)
+        self.switch_to("main_menu")
+
+    
