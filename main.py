@@ -2,15 +2,16 @@ import pygame
 import sys
 import config
 from config import *
+from ui.transition import Transition
 # 导入场景
 from scenes.menu import MainMenuScene
 from scenes.gacha import GachaScene
 from scenes.collection import CollectionScene
 from scenes.deck_builder_scene import DeckBuilderScene
 from scenes.battle_menu import BattleMenuScene
-from scenes.battle.draft_battle import BattleScene
 from scenes.draft_scene import DraftScene
-from ui.transition import Transition
+from scenes.battle.draft_battle import DraftBattleScene
+from scenes.battle.simple_battle import SimpleBattleScene
 
 """场景管理器"""
 class SceneManager:
@@ -47,8 +48,9 @@ class SceneManager:
         self.scenes["collection"] = CollectionScene(self.screen)
         self.scenes["deck_builder"] = DeckBuilderScene(self.screen)
         self.scenes["battle_menu"] = BattleMenuScene(self.screen)
-        self.scenes["battle"] = BattleScene(self.screen)
         self.scenes["draft_scene"] = DraftScene(self.screen)
+        self.scenes["draft_battle"] = DraftBattleScene(self.screen)
+        self.scenes["simple_battle"] = SimpleBattleScene(self.screen)
         
     def switch_scene(self, scene_name):
         """切换场景（带转场效果）"""

@@ -1,178 +1,187 @@
 """基于预设的牌库deck 关卡常规战斗场景（玩家 vs AI）"""
 import os
-import json
 import pygame
-from scenes.battle.battle_base_scene import BattleBaseScene  # 战斗场景基类
-from utils.card_database import CardData
+import copy
+from scenes.battle.battle_base_scene import BattleBaseScene # 战斗场景基类
+from utils.card_database import get_card_database, CardData # 卡牌数据库
+from utils.deck_manager import get_deck_manager  # 卡组管理器
+
+player_deck_json = "data/deck/player_deck/deck.json"  # 玩家牌库JSON路径
+enemy_deck_json = "data/deck/enemy_deck/deck.json"    # 敌人
 
 class SimpleBattleScene(BattleBaseScene):
-    def __init__(self, screen, player_deck_json, enemy_deck_json):
+    def __init__(self, screen):
         super().__init__(screen)
+
+        # JSON 文件路径
         self.player_deck_json = player_deck_json
         self.enemy_deck_json = enemy_deck_json
 
-        # 内部牌堆（list of CardData 或 image path）
-        self.player_deck = []
-        self.enemy_deck = []
-
-        # 抽卡索引或shuffle后的堆
-        self._player_draw_pile = []
+        # 工作牌堆（按顺序抽取）
+        self.w_pi_player_drale = []
         self._enemy_draw_pile = []
 
-        # 标记是否为 AI 自动模式（默认 True）
-        self.enemy_auto_mode = True
+        # 敌人AI设置（SimpleBattle自带AI，一定开启）
+        self.auto_timer = 0.0
+        self.auto_delay = 1.5  # AI 思考时间
 
-    # ---------- Deck 载入 ----------
-    def load_deck_from_json(self, json_path):
-        """
-        载入一个 deck JSON，返回 CardData 列表（只包含必要字段）。
-        JSON 格式:
-        {
-          "deck": [
-            {"path": "assets/outputs\\SS\\003.png", "rarity": "SS"},
-            ...
-          ]
-        }
-        """
-        if not os.path.exists(json_path):
-            print(f"[SimpleBattle] Deck JSON 不存在: {json_path}")
-            return []
+    """====================核心功能===================="""
+    def enter(self):
+        super().enter()
+    
+    def update(self, dt):
+        super().update(dt)
+        
+        # AI出牌逻辑
+        if (self.current_turn == "player2" and self.turn_phase == "playing"):
+            self.auto_timer += dt
+            # 出牌阶段
+            if self.cards_played_this_turn < self.max_cards_per_turn:
+                if self.auto_timer >= self.auto_delay:
+                    self.auto_timer = 0.0
+                    played = self.enemy_ai_play_card()
+                    if not played:
+                        print("[AI] 无法出牌（无手牌或准备区满）")
+            # 结束回合阶段
+            elif self.cards_played_this_turn >= self.max_cards_per_turn:
+                if self.auto_timer >= self.auto_delay * 0.5:
+                    self.auto_timer = 0.0
+                    self.end_turn()
+    
+    def handle_event(self, event):
+        super().handle_event(event)
 
-        with open(json_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        # 只处理玩家的手牌交互
+        if self.current_turn == "player1":
+            action = self.player_hand.handle_event(event)
 
-        cards = []
-        for item in data.get("deck", []):
-            path = item.get("path")
-            rarity = item.get("rarity", "C")
-            # 尝试从现有 CardData 数据库或按路径构造简单 CardData
-            # 先尝试使用已有的数据库查找（若你的项目有 get_card_by_path）
-            from utils.card_database import get_card_database
-            db = get_card_database()
-            card = db.get_card_by_path(path) if db else None
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if action == "play" and self.can_play_card():
+                    selected = self.player_hand.get_selected_card()
+                    if selected:
+                        self.play_card_to_waiting(selected)
+                        self.clear_slot_highlights()
+                    elif not selected:
+                        print("本回合已出过牌！")
 
-            if card is None:
-                # fallback: 从路径解析 id，构造 minimal CardData
-                filename = os.path.splitext(os.path.basename(path))[0]  # "003"
-                card_id = f"{rarity}_{filename}"
-                card = CardData(
-                    card_id=card_id,
-                    name=f"Card {filename}",
-                    rarity=rarity,
-                    atk=item.get("atk", 0),
-                    hp=item.get("hp", 0),
-                    cd=item.get("cd", 0),
-                    image_path=path
-                )
-            cards.append(card)
-        return cards
+                elif action == "select" and self.can_play_card():
+                    self.highlight_valid_slots()
+                elif action == "deselect":
+                    self.clear_slot_highlights()
 
-    # ---------- 初始化 ----------
+        # 鼠标移动
+        if event.type == pygame.MOUSEMOTION:
+            mouse_pos = event.pos
+            all_slots = (
+                self.player_battle_slots + 
+                self.enemy_battle_slots + 
+                self.player_waiting_slots + 
+                self.enemy_waiting_slots + 
+                [self.player_discard_slot, self.enemy_discard_slot]
+            )
+            
+            for slot in all_slots:
+                slot.is_hovered = slot.rect.collidepoint(mouse_pos)
+
+        # 按钮事件
+        self.back_button.handle_event(event)
+        
+        # 玩家回合自动结束回合
+        if self.can_end_turn():
+            self.end_turn()
+    
     def initialize_battle(self):
-        """
-        初始化回合、血量、槽位、手牌，并以 JSON deck 填充牌堆。
-        调用父类的 create_* 和 UI 初始化（在 Base 已实现）。
-        """
-        super().initialize_battle()  # 如果 base 有公共 init 行为
-
-        # 载入 decks
-        self.player_deck = self.load_deck_from_json(self.player_deck_json)
-        self.enemy_deck = self.load_deck_from_json(self.enemy_deck_json)
-
-        # shuffle or keep order
-        import random
+        # 加载双方decks
+        self.player_deck = self._load_deck_json(self.player_deck_json)
+        self.enemy_deck = self._load_deck_json(self.enemy_deck_json)
+        # 填充抽牌堆
         self._player_draw_pile = self.player_deck[:]
         self._enemy_draw_pile = self.enemy_deck[:]
+        
+        # 洗牌
+        import random
         random.shuffle(self._player_draw_pile)
         random.shuffle(self._enemy_draw_pile)
 
-        # 清空手牌与准备区/战斗区（假设 base 提供）
-        self.player_hand.clear()
-        self.enemy_hand.clear()
-        for s in (self.player_waiting_slots + self.player_battle_slots +
-                  self.enemy_waiting_slots + self.enemy_battle_slots):
-            s.remove_card()
+        # 更新卡堆渲染器计数
+        self.player_deck_renderer.set_count(len(self._player_draw_pile))
+        self.enemy_deck_renderer.set_count(len(self._enemy_draw_pile))
 
-        # 初始化 HP / 回合数等（如果 base 未完成）
-        self.player_current_hp = getattr(self, "player_current_hp", 100)
-        self.enemy_current_hp = getattr(self, "enemy_current_hp", 100)
-        self.turn_number = 1
-        self.current_turn = "player1"
-        self.turn_phase = "playing"
-        self.cards_played_this_turn = 0
+        # 设置抽卡动画队列（开局各抽3张，交替抽取）
+        self.draw_queue = []
+        delay = 0.5
+        initial_draw = getattr(self, "INITIAL_HAND_SIZE", 3)
+        for i in range(initial_draw):
+            self.draw_queue.append(("player", delay))
+            delay += 0.3
+            self.draw_queue.append(("enemy", delay))
+            delay += 0.3
+        print(f"战斗初始化完成")
 
-        # 抽初始手牌（如果游戏规则是 INITIAL_HAND_SIZE）
-        initial = getattr(self, "INITIAL_HAND_SIZE", 3)
-        for _ in range(initial):
-            self.draw_card_to_hand("player1", animate=False)
-            self.draw_card_to_hand("player2", animate=False)
-
-    # ---------- 抽卡/发牌接口（覆写 base 的抽卡函数或提供新的） ----------
-    def draw_card_to_hand(self, who, animate=True):
-        """
-        从对应堆抽一张到手牌（player1 或 player2）。
-        animate 可选用于禁用动画（初始化时禁用）。
-        """
-        if who == "player1":
-            if not self._player_draw_pile:
-                print("[SimpleBattle] 玩家抽牌堆已空")
-                return None
-            card_data = self._player_draw_pile.pop(0)
-            self.player_hand.add_card(card_data, animate=animate)
-            return card_data
-        else:
-            if not self._enemy_draw_pile:
-                print("[SimpleBattle] 敌人抽牌堆已空")
-                return None
-            card_data = self._enemy_draw_pile.pop(0)
-            self.enemy_hand.add_card(card_data, animate=animate)
-            return card_data
-
-    # ---------- 覆盖/扩展行为 ----------
+    """====================回合控制===================="""
     def switch_turn(self):
-        """
-        切换回合：复用 Base 的 switch_turn（若 base 有标准实现）。
-        在 Simple 模式下保持同样的流程，AI 自动触发出牌逻辑由 update 处理。
-        """
+        """切换回合后 检查是否手牌为空并自动进入战斗"""
         super().switch_turn()
-        # 如果你需要立即触发 AI，可以在这里触发状态重置
-        if self.current_turn == "player2" and self.enemy_auto_mode:
-            # 重置 AI 相关计时器（base 可能已有）
-            self.auto_timer = 0.0
-            # 如果没有 base 的 AI 主体，确保有 enemy_ai_play_card 可用
 
-    def update(self, dt):
-        """
-        每帧更新：复用 Base 的 update（渲染+动画+战斗阶段等），
-        并在 playing 阶段加入简单的 AI 出牌控制（如果 base 没有通用实现）。
-        """
-        # 调用 base 的 update 处理 UI、战斗动画等
-        super().update(dt)
+        # 检查手牌数量，决定是否跳过出牌阶段
+        current_hand = self.player_hand if self.current_turn == "player1" else self.enemy_hand
+        if len(current_hand.cards) == 0:
+            self.cards_played_this_turn = self.max_cards_per_turn # 已无手牌，标记为已完成出牌
+            pygame.time.delay(500) # 延迟0.5秒（给玩家反应时间）
+            self.end_turn() # 进入战斗，结束回合
+        elif self.current_turn == "player2":
+            print("敌人回合，AI 将自动出牌")
 
-        # 仅当在 playing 且为敌人回合时，触发简单 AI（使用 base 的 enemy_ai_play_card）
-        if (self.current_turn == "player2" and self.turn_phase == "playing" and
-                self.enemy_auto_mode and not getattr(self, "is_switching_turn", False)):
-            self.auto_timer += dt
-            if getattr(self, "cards_played_this_turn", 0) < getattr(self, "max_cards_per_turn", 1):
-                if self.auto_timer >= getattr(self, "auto_delay", 1.0):
-                    self.auto_timer = 0.0
-                    # 尝试调用 base 的 AI 出牌方法（如果在 base）
-                    if hasattr(self, "enemy_ai_play_card"):
-                        played = self.enemy_ai_play_card()
-                        if not played:
-                            # 无法出牌，可能手牌空或等待区满
-                            pass
-            else:
-                # 达到本回合出牌数，触发结束回合
-                if self.auto_timer >= getattr(self, "auto_delay", 1.0) * 0.5:
-                    if hasattr(self, "end_turn"):
-                        self.end_turn()
-                        self.auto_timer = 0.0
+    """====================其他===================="""
+    def _load_deck_json(self, json_path):
+        """从json文件或DeckManager获取deck entries，并转换为CardData列表"""
+        deck = []
+        deck_mgr = get_deck_manager(save_file=json_path, max_deck_size=12)
+        entries = deck_mgr.get_deck()
+        db = get_card_database()
+        for entry in entries:
+            path = entry.get("path", "")
+            rarity = entry.get("rarity", "C")
 
-    # ---------- 事件处理（player 操作） ----------
-    def handle_event(self, event):
-        """
-        复用 Base 的 handle_event（包含鼠标点击手牌、拖拽、结束回合按钮）。
-        如果必须区分 draft 的特殊交互，覆盖这里并调用 super 的通用处理。
-        """
-        super().handle_event(event)
+            card_data = None
+            try:
+                card_data = copy.deepcopy(db.get_card_by_path(path)) # 使用 deepcopy 避免双方卡组引用同一对象！！
+            except Exception as e:
+                print(f"[SimpleBattle] db.get_card_by_path 抛出异常: path='{path}', err={e}")
+                card_data = None
+
+            if card_data is None:
+                filename = os.path.splitext(os.path.basename(path))[0]
+                inferred_id = f"{rarity}_{filename}"
+                print(f"[SimpleBattle] 在数据库中找不到卡牌 record: path='{path}', inferred_id='{inferred_id}' - 使用 fallback CardData")
+                card_data = CardData(
+                    card_id=inferred_id,
+                    name=entry.get("name", f"Card {filename}"),
+                    rarity=rarity,
+                    atk=entry.get("atk", 0),
+                    hp=entry.get("hp", 0),
+                    cd=entry.get("cd", 0),
+                    image_path=path
+                )
+
+            deck.append(card_data)
+    
+        return deck
+
+    def enemy_ai_play_card(self):
+        """简单的敌人AI：随机出一张手牌（如果可出）"""
+        if not self.can_play_card():
+            return False
+
+        if getattr(self.enemy_hand, "cards", None):
+            # 假设 enemy_hand.cards 是 Card 对象列表，使用随机出一张
+            try:
+                from random import choice
+                card_obj = choice(self.enemy_hand.cards)
+                self.play_card_to_waiting(card_obj)
+                return True
+            except Exception as e:
+                print(f"[AI] 出牌失败: {e}")
+                return False
+
+        return False

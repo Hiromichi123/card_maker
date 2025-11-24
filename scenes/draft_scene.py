@@ -344,7 +344,7 @@ class DraftScene(BaseScene):
         
         # 延迟后进入战斗场景
         pygame.time.delay(1000)
-        self.switch_to("battle")
+        self.switch_to("draft_battle")
     
     def update(self, dt):
         """更新"""

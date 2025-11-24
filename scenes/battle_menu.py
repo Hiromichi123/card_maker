@@ -38,7 +38,7 @@ class BattleMenuScene(BaseScene):
             "单人战役",
             color=(200, 50, 50),
             hover_color=(255, 80, 80),
-            on_click=lambda: self.switch_to("battle")
+            on_click=lambda: self.switch_to("simple_battle")
         )
         self.buttons.append(battle_btn1)
 
@@ -51,7 +51,7 @@ class BattleMenuScene(BaseScene):
             "局域网 卡组对战",
             color=(200, 70, 50),
             hover_color=(255, 100, 80),
-            on_click=lambda: self.switch_to("battle")
+            on_click=lambda: self.switch_to("simple_battle")
         )
         self.buttons.append(battle_btn2)
 
@@ -64,7 +64,7 @@ class BattleMenuScene(BaseScene):
             "局域网 任选对战",
             color=(200, 90, 50),
             hover_color=(255, 120, 80),
-            on_click=lambda: self.switch_to("battle")
+            on_click=lambda: self.switch_to("simple_battle")
         )
         self.buttons.append(battle_btn3)
 
@@ -80,7 +80,7 @@ class BattleMenuScene(BaseScene):
             on_click=lambda: self.switch_to("draft_scene")
         )
         self.buttons.append(battle_btn4)
-        
+
         # 返回主菜单按钮
         back_btn = MenuButton(
             base_x - stagger_offset * 4,

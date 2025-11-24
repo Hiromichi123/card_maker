@@ -87,7 +87,6 @@ class BattleBaseScene(BaseScene):
         self.player_discard_slot = None  # 玩家弃牌堆
         self.enemy_discard_slot = None   # 敌人弃牌堆
         self.create_slots() # 创建槽位
-        self.create_buttons() # 创建按钮
 
         # 卡堆渲染器
         player_deck_x = int(WINDOW_WIDTH * 0.05)
@@ -96,6 +95,12 @@ class BattleBaseScene(BaseScene):
         enemy_deck_x = int(WINDOW_WIDTH * 0.05)
         enemy_deck_y = int(WINDOW_HEIGHT * 0.15)  # 敌人卡堆位置（左上）
         self.enemy_deck_renderer = DeckRenderer(enemy_deck_x, enemy_deck_y, is_player=False)
+
+        # 按钮
+        self.button_width = int(150 * UI_SCALE)
+        self.button_height = int(50 * UI_SCALE)
+        self.margin = int(20 * UI_SCALE)
+        self.create_base_buttons()
 
         # 双方牌堆
         self.player_deck = []
@@ -112,11 +117,11 @@ class BattleBaseScene(BaseScene):
         self.enemy_hand.deck_position = (self.enemy_deck_renderer.position[0] + 60, self.enemy_deck_renderer.position[1] + 90)
 
         # 回合状态
-        self.current_turn = "player1"  # player1, player2
-        self.turn_phase = "playing"    # playing（出牌阶段）, battling（战斗结算中）
-        self.turn_number = 1           # 回合数
+        self.current_turn = "player1"    # player1, player2
+        self.turn_phase = "playing"      # playing（出牌阶段）, battling（战斗结算中）
+        self.turn_number = 1             # 回合数
         self.cards_played_this_turn = 0  # 本回合已出牌数
-        self.max_cards_per_turn = 1    # 每回合最多出牌数
+        self.max_cards_per_turn = 1      # 每回合最多出牌数
         
         # 战斗状态
         self.battle_in_progress = False  # 是否正在进行战斗结算
@@ -136,6 +141,9 @@ class BattleBaseScene(BaseScene):
     """====================核心功能类===================="""
     def enter(self):
         super().enter()
+        if not self.battle_initialized:
+            self.initialize_battle()
+            self.battle_initialized = True
 
     def update(self, dt):
         if self.game_over:
@@ -180,6 +188,12 @@ class BattleBaseScene(BaseScene):
             if event.key == pygame.K_ESCAPE:
                 self.player_hand.clear_selection()
                 self.switch_to("main_menu")
+        
+        # 游戏结束时只允许返回菜单
+        if self.game_over:
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                self.switch_to("main_menu")
+            return
 
     def draw(self):
         self.screen.blit(self.background, (0, 0)) # 背景
@@ -188,9 +202,20 @@ class BattleBaseScene(BaseScene):
         self.draw_health_bars() # 血量条
         self.draw_slots() # 槽位
         # 绘制按钮
-        self.back_button.draw(self.screen)
-        self.end_turn_button.draw(self.screen)
-        self.enemy_ai_toggle_button.draw(self.screen)
+        self.back_button.draw(self.screen) # 绘制返回按钮
+        # 卡堆
+        self.player_deck_renderer.draw(self.screen)
+        self.enemy_deck_renderer.draw(self.screen)
+        # 手牌
+        self.player_hand.draw(self.screen)
+        self.enemy_hand.draw(self.screen)
+        # 战斗动画
+        for anim in self.battle_animations:
+            if hasattr(anim, 'draw'):
+                anim.draw(self.screen)
+        # 游戏结束提示
+        if self.game_over:
+            self.draw_game_over_overlay()
 
     def initialize_battle(self):
         # 从卡牌数据库获取卡组
@@ -219,7 +244,6 @@ class BattleBaseScene(BaseScene):
             self.winner = "player1"
             print("游戏结束，玩家获胜！")
             print("[游戏结束] 3秒后返回主菜单...")
-            self.show_game_over_screen()
             pygame.time.delay(3000)
             self.switch_to("main_menu")
             return True
@@ -281,7 +305,7 @@ class BattleBaseScene(BaseScene):
         
         if self.battle_phase == "attacking":
             self.battle_timer += dt
-            # 每隔0.8秒处理一次攻击
+            # 每隔0.9秒处理一次攻击
             if self.battle_timer >= 0.9:
                 self.battle_timer = 0.0
                 # 查找下一个可攻击的卡牌
@@ -329,7 +353,16 @@ class BattleBaseScene(BaseScene):
                 # 检查游戏是否结束
                 if not self.check_game_over():
                     self.switch_turn()
- 
+
+    def can_play_card(self):
+        """检查当前回合是否可以出牌"""
+        result = self.turn_phase == "playing" and self.cards_played_this_turn < self.max_cards_per_turn
+        return result
+
+    def can_end_turn(self):
+        """检查是否可以结束回合"""
+        result = self.turn_phase == "playing" and self.cards_played_this_turn >= self.max_cards_per_turn
+        return result
 
     """====================初始化和资源加载类===================="""
     def load_background(self):
@@ -539,52 +572,19 @@ class BattleBaseScene(BaseScene):
             enemy_discard_x, enemy_discard_y, discard_width, discard_height, "discard"
         )
     
-    def create_buttons(self):
+    def create_base_buttons(self):
         """创建UI按钮"""
-        button_width = int(150 * UI_SCALE)
-        button_height = int(50 * UI_SCALE)
-        margin = int(20 * UI_SCALE)
-        
         # 返回按钮（左下角）
         self.back_button = Button(
-            margin,
+            self.margin,
             int(WINDOW_HEIGHT * 0.95),
-            button_width,
-            button_height,
+            self.button_width,
+            self.button_height,
             "返回菜单",
             color=(100, 100, 100),
             hover_color=(130, 130, 130),
             font_size=24,
             on_click=lambda: self.switch_to("main_menu")
-        )
-
-        # 敌人AI开关按钮（右侧中间偏上）
-        toggle_width = int(120 * UI_SCALE)
-        toggle_height = int(40 * UI_SCALE)
-        
-        self.enemy_ai_toggle_button = Button(
-            int(WINDOW_WIDTH * 0.85),
-            int(WINDOW_HEIGHT * 0.45),
-            toggle_width,
-            toggle_height,
-            "AI: 开",
-            color=(50, 200, 50),
-            hover_color=(80, 230, 80),
-            font_size=20,
-            on_click=self.toggle_enemy_ai
-        )
-        
-        # 结束回合按钮（右侧中间）
-        self.end_turn_button = Button(
-            int(WINDOW_WIDTH * 0.85),
-            int(WINDOW_HEIGHT * 0.5),
-            button_width,
-            button_height,
-            "结束回合",
-            color=(200, 100, 50),
-            hover_color=(230, 130, 80),
-            font_size=24,
-            on_click=self.end_turn
         )
 
     """====================基础绘制类===================="""
@@ -815,14 +815,14 @@ class BattleBaseScene(BaseScene):
                 return slot.card_data
         
         return None
-     
+
     def highlight_valid_slots(self):
         """高亮准备区空槽位"""
         if self.turn_phase == "prepare":
             for slot in self.player_waiting_slots:
                 if not slot.has_card():
                     slot.is_highlighted = True
-    
+
     def clear_slot_highlights(self):
         """清除所有槽位高亮"""
         all_slots = (

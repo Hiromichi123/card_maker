@@ -123,14 +123,7 @@ class DraggableCard:
 
 class DeckSlot:
     """卡组槽位类"""
-    
     def __init__(self, x, y, width, height, index):
-        """
-        Args:
-            x, y: 槽位位置
-            width, height: 槽位尺寸
-            index: 槽位索引
-        """
         self.rect = pygame.Rect(x, y, width, height)
         self.index = index
         self.card = None  # 当前槽位的卡牌数据

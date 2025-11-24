@@ -385,3 +385,4 @@ class CollectionScene(BaseScene):
                 card.draw(surface, offset_y)
         
         self.scroll_view.end_draw(self.screen)
+        

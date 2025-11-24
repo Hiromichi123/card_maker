@@ -1,44 +1,43 @@
 """双人本地 选卡战斗场景"""
 import pygame
-from config import *
+from config import WINDOW_WIDTH, WINDOW_HEIGHT, UI_SCALE
+from ui.button import Button
 from scenes.battle.battle_base_scene import BattleBaseScene # 战斗场景基类
 from utils.draft_manager import get_draft_manager # draft抽卡管理器
 
-"""战斗场景"""
-class BattleScene(BattleBaseScene):
+"""本地自选卡 战斗场景"""
+class DraftBattleScene(BattleBaseScene):
     def __init__(self, screen):
         super().__init__(screen)
 
-        # 自动模式（仅用于敌人AI）
+        # 敌人AI开关按钮（右侧中间偏上）
+        self.toggle_width = int(160 * UI_SCALE)
+        self.toggle_height = int(60 * UI_SCALE)
+        self.create_buttons()
+
+        # draft自动模式（仅用于敌人AI，可控制是否启用）
         self.enemy_auto_mode = True    # 敌人是否自动
         self.auto_timer = 0.0
-        self.auto_delay = 3.0          # 敌人AI思考时间
+        self.auto_delay = 2.0          # 敌人AI思考时间
 
     """====================核心功能===================="""
     def enter(self):
-        """进入场景初始化"""
         super().enter()
-        if not self.battle_initialized:
-            self.initialize_battle()
-            self.battle_initialized = True
 
     def update(self, dt):
         super().update(dt)
         
-        # 敌人AI逻辑
-        if (self.current_turn == "player2" and 
-            self.turn_phase == "playing" and 
-            self.enemy_auto_mode):
+        # AI出牌逻辑
+        if (self.current_turn == "player2" and self.turn_phase == "playing" and self.enemy_auto_mode):
             self.auto_timer += dt
-            
-            # 分两个阶段：出牌阶段 → 结束回合阶段
+            # 出牌阶段
             if self.cards_played_this_turn < self.max_cards_per_turn:
-                # 出牌阶段
                 if self.auto_timer >= self.auto_delay:
                     self.auto_timer = 0.0
                     played = self.enemy_ai_play_card()
                     if not played:
                         print("[AI] 无法出牌（无手牌或准备区满）")
+            # 结束回合阶段
             elif self.cards_played_this_turn >= self.max_cards_per_turn:
                 if self.auto_timer >= self.auto_delay * 0.5:
                     self.end_turn()
@@ -46,12 +45,7 @@ class BattleScene(BattleBaseScene):
 
     def handle_event(self, event):
         super().handle_event(event)
-        # 游戏结束时只允许返回菜单
-        if self.game_over:
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                self.switch_to("main_menu")
-            return
-        
+
         # 手牌事件（根据回合判断）
         player_action = None
         enemy_action = None
@@ -61,8 +55,6 @@ class BattleScene(BattleBaseScene):
             # 敌人回合，如果AI关闭则允许手动操作
             if not self.enemy_auto_mode:
                 enemy_action = self.enemy_hand.handle_event(event)
-            else:
-                action = None
         
         # 处理手牌点击（当前回合的owner）
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -108,26 +100,15 @@ class BattleScene(BattleBaseScene):
         # 按钮事件
         self.back_button.handle_event(event)
         self.enemy_ai_toggle_button.handle_event(event)
+        
         # 只有完成出牌后才能点击结束回合按钮
         if self.can_end_turn():
             self.end_turn_button.handle_event(event)
 
     def draw(self):
         super().draw()
-        # 卡堆
-        self.player_deck_renderer.draw(self.screen)
-        self.enemy_deck_renderer.draw(self.screen)
-        # 手牌
-        self.player_hand.draw(self.screen)
-        self.enemy_hand.draw(self.screen)
-
-        # 绘制战斗动画
-        for anim in self.battle_animations:
-            if hasattr(anim, 'draw'):
-                anim.draw(self.screen)
-        # 游戏结束提示
-        if self.game_over:
-            self.draw_game_over_overlay()
+        self.end_turn_button.draw(self.screen) # 绘制结束回合按钮
+        self.enemy_ai_toggle_button.draw(self.screen) # 绘制AI开关按钮
     
     def initialize_battle(self):
         db = super().initialize_battle()
@@ -150,7 +131,7 @@ class BattleScene(BattleBaseScene):
         random.shuffle(self.player_deck)
         random.shuffle(self.enemy_deck)
         
-        # 更新卡堆数量
+        # 更新卡堆渲染器计数
         self.player_deck_renderer.set_count(len(self.player_deck))
         self.enemy_deck_renderer.set_count(len(self.enemy_deck))
         
@@ -158,16 +139,15 @@ class BattleScene(BattleBaseScene):
         self.draw_queue = []
         delay = 0.5
         for i in range(3):
-            # 玩家抽卡
             self.draw_queue.append(('player', delay))
-            delay += 0.3 # 每张卡间隔
-            # 敌人抽卡
+            delay += 0.3
             self.draw_queue.append(('enemy', delay))
             delay += 0.3
         print(f"战斗初始化完成")
 
     """====================回合控制===================="""
     def switch_turn(self):
+        """切换回合后 检查是否手牌为空并自动进入战斗"""
         super().switch_turn()
 
         # 检查手牌数量，决定是否跳过出牌阶段
@@ -181,6 +161,33 @@ class BattleScene(BattleBaseScene):
                 print("[AI] 敌人AI将在 1.5秒后自动出牌")
 
     """====================其他===================="""
+    def create_buttons(self):
+        # 敌人AI开关按钮（右侧中间偏上）
+        self.enemy_ai_toggle_button = Button(
+            int(WINDOW_WIDTH * 0.85),
+            int(WINDOW_HEIGHT * 0.45),
+            self.toggle_width,
+            self.toggle_height,
+            "AI: 开",
+            color=(50, 200, 50),
+            hover_color=(80, 230, 80),
+            font_size=20,
+            on_click=self.toggle_enemy_ai
+        )
+        
+        # 结束回合按钮（右侧中间）
+        self.end_turn_button = Button(
+            int(WINDOW_WIDTH * 0.85),
+            int(WINDOW_HEIGHT * 0.5),
+            self.button_width,
+            self.button_height,
+            "结束回合",
+            color=(200, 100, 50),
+            hover_color=(230, 130, 80),
+            font_size=24,
+            on_click=self.end_turn
+        )
+
     def toggle_enemy_ai(self):
         """切换敌人AI"""
         self.enemy_auto_mode = not self.enemy_auto_mode
@@ -195,16 +202,6 @@ class BattleScene(BattleBaseScene):
             self.enemy_ai_toggle_button.color = (80, 80, 80)
             self.enemy_ai_toggle_button.hover_color = (100, 100, 100)
             print("[AI] 敌人AI已关闭（可手动操作敌人）")
-
-    def can_play_card(self):
-        """检查当前回合是否可以出牌"""
-        result = self.turn_phase == "playing" and self.cards_played_this_turn < self.max_cards_per_turn
-        return result
-
-    def can_end_turn(self):
-        """检查是否可以结束回合"""
-        result = self.turn_phase == "playing" and self.cards_played_this_turn >= self.max_cards_per_turn
-        return result
 
     def on_end_turn_click(self):
         """点击结束回合按钮"""
