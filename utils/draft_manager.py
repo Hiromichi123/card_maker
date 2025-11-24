@@ -71,13 +71,7 @@ class DraftManager:
         return all_cards
     
     def pick_card(self, card_index):
-        """
-        选择一张卡牌
-        Args:
-            card_index: 卡牌在draft_pool中的索引
-        Returns:
-            bool: 是否选择成功
-        """
+        """选择一张卡牌"""
         if card_index < 0 or card_index >= len(self.draft_pool):
             return False
         
@@ -159,10 +153,8 @@ class DraftManager:
         """获取未被选择的卡牌"""
         return [card for card in self.draft_pool if not card["picked"]]
 
-
 # 全局Draft管理实例
 _draft_manager = None
-
 def get_draft_manager():
     """获取全局Draft管理实例"""
     global _draft_manager

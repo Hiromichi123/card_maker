@@ -8,7 +8,7 @@ from scenes.gacha import GachaScene
 from scenes.collection import CollectionScene
 from scenes.deck_builder_scene import DeckBuilderScene
 from scenes.battle_menu import BattleMenuScene
-from scenes.battle import BattleScene
+from scenes.battle.draft_battle import BattleScene
 from scenes.draft_scene import DraftScene
 from ui.transition import Transition
 

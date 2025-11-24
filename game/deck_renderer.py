@@ -6,23 +6,16 @@ class DeckRenderer:
     """卡堆渲染器"""
     
     def __init__(self, x, y, is_player=True):
-        """
-        Args:
-            x, y: 卡堆位置
-            is_player: 是否为玩家
-        """
         self.position = (x, y)
         self.is_player = is_player
         
         # 卡牌尺寸
-        self.card_width = int(120 * UI_SCALE)
-        self.card_height = int(180 * UI_SCALE)
+        self.card_width = int(144 * UI_SCALE)
+        self.card_height = int(216 * UI_SCALE)
         
-        # 卡堆剩余数量
-        self.card_count = 0
+        self.card_count = 0 # 卡堆剩余数量
         
-        # 创建卡背图片
-        self.create_card_back()
+        self.create_card_back() # 创建卡背图片
         
     def create_card_back(self):
         """创建卡背"""
