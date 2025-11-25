@@ -2,8 +2,8 @@ import pygame
 import sys
 import config
 from config import *
+from startup import SplashScreen
 from ui.transition import Transition
-# 导入场景
 from scenes.menu import MainMenuScene
 from scenes.gacha import GachaScene
 from scenes.collection import CollectionScene
@@ -38,9 +38,15 @@ class SceneManager:
         self.transition = Transition()
         self.pending_scene = None  # 等待切换的场景
         
-        self.register_scenes() # 注册场景
-        self.switch_scene("main_menu") # 切换到主菜单
+        # 直接注册并切换主菜单（旧）
+        #self.register_scenes() # 注册场景
+        #self.switch_scene("main_menu") # 切换到主菜单
         
+        # 启动画面，在淡出完成后再注册场景并切换到主菜单(新)
+        self.splash = SplashScreen()
+        # 开始后台加载（loader 在后台线程运行，on_finished 在主线程 splash 完成时调用）
+        self.splash.start_loading(loader_func=self._background_load, on_finished=self._on_splash_finished)
+
     """注册所有场景"""
     def register_scenes(self):
         self.scenes["main_menu"] = MainMenuScene(self.screen)
@@ -86,53 +92,63 @@ class SceneManager:
         self.transition.start_fade_in()
     
     def run(self):
-        """主循环"""
+        """主循环（已集成Splash）"""
         running = True
-        
+
         while running:
             dt = self.clock.tick(FPS) / 1000.0
-            
-            # 事件处理
+
+            # 事件处理：如果splash正在运行优先交给splash处理，否则交给当前场景
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
                 else:
-                    # 传递事件到当前场景（如果不在转场中）
-                    if self.current_scene and not self.transition.is_transitioning:
-                        self.current_scene.handle_event(event)
-            
-            # 检查主菜单的退出标志
-            if hasattr(self.current_scene, 'quit_flag') and self.current_scene.quit_flag:
+                    if hasattr(self, "splash") and self.splash.running:
+                        self.splash.handle_event(event)
+                    else:
+                        if self.current_scene and not self.transition.is_transitioning:
+                            self.current_scene.handle_event(event)
+
+            # 如果 splash 正在运行，则让 splash 接管更新与绘制，然后跳过常规场景逻辑
+            if hasattr(self, "splash") and self.splash.running:
+                self.splash.update(dt)
+                self.splash.draw(self.screen)
+                # 显示 FPS 并翻转缓冲区
+                self.draw_fps()
+                pygame.display.flip()
+                continue
+
+            # 检查退出标志quit_flag，若为真则退出主循环
+            if self.current_scene and getattr(self.current_scene, "quit_flag", False):
                 running = False
-            
+                continue
+
             # 更新转场效果
             self.transition.update(dt)
-            
-            # 更新当前场景
+
+            # 更新当前场景并处理场景内部请求的切换
             if self.current_scene:
                 self.current_scene.update(dt)
-                
-                # 检查是否需要切换场景
+
                 if self.current_scene.next_scene and not self.transition.is_transitioning:
                     next_scene = self.current_scene.next_scene
                     self.current_scene.next_scene = None
                     self.switch_scene(next_scene)
-            
-            # 绘制当前场景
+
+            # 绘制当前场景（含提示框）
             if self.current_scene:
-                self.current_scene.draw_with_tooltip() # 绘制场景和提示框
-            
-            # 绘制转场效果
+                self.current_scene.draw_with_tooltip()
+
+            # 绘制转场效果、FPS
             self.transition.draw(self.screen)
-            
-            self.draw_fps() # 显示FPS
+            self.draw_fps()
             pygame.display.flip()
-        
-        # 清理悬停框资源
+
+        # 退出前清理悬停框资源
         from ui.tooltip import get_tooltip
         tooltip = get_tooltip()
         tooltip.stop_monitoring()
-        
+
         # 退出
         pygame.quit()
         sys.exit()
@@ -145,6 +161,36 @@ class SceneManager:
             True, (150, 150, 150)
         )
         self.screen.blit(fps_text, (int(WINDOW_WIDTH * 0.92), int(WINDOW_HEIGHT * 0.02)))
+
+    """===========后台加载==========="""
+    def _background_load(self):
+        """在后台线程运行"""
+        try:
+            import time, os
+            # 示例：预读取 data 下的 json 文件内容（IO-bound，线程安全）
+            data_dir = "data"
+            for root, dirs, files in os.walk(data_dir):
+                for fn in files:
+                    if fn.lower().endswith(".json"):
+                        p = os.path.join(root, fn)
+                        try:
+                            with open(p, "r", encoding="utf-8") as f:
+                                _ = f.read()
+                        except Exception:
+                            pass
+            # 可选：短暂 sleep 模拟 / 等待
+            time.sleep(0.4)
+        except Exception as e:
+            print("[SceneManager] background load error:", e)
+
+    def _on_splash_finished(self):
+        """
+        在主线程由 SplashScreen 在这里注册场景并切换到主菜单（安全地在主线程内执行 pygame 相关操作）。
+        """
+        # 注册所有场景（在主线程执行，避免线程安全问题）
+        self.register_scenes()
+        # 切换到主菜单
+        self.switch_scene("main_menu")
 
 if __name__ == "__main__":
     game = SceneManager()

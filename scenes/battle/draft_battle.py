@@ -156,9 +156,8 @@ class DraftBattleScene(BattleBaseScene):
             self.cards_played_this_turn = self.max_cards_per_turn  # 已无手牌，标记为已完成出牌
             pygame.time.delay(500)  # 延迟0.5秒（给玩家反应时间）
             self.end_turn()  # 进入战斗，结束回合
-        else:
-            if self.current_turn == "player2" and self.enemy_auto_mode: # 有手牌，正常提示
-                print("[AI] 敌人AI将在 1.5秒后自动出牌")
+        elif self.current_turn == "player2" and self.enemy_auto_mode: # 有手牌，正常提示
+            print("[AI] 敌人AI将在 1.5秒后自动出牌")
 
     """====================其他===================="""
     def create_buttons(self):

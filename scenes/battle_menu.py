@@ -1,10 +1,10 @@
 """战斗菜单场景"""
 import pygame
+from config import *
 from scenes.base_scene import BaseScene
 from ui.menu_button import MenuButton
 from ui.background import ParallaxBackground
-from config import *
-from config import get_font
+from ui.system_ui import CurrencyLevelUI
 
 class BattleMenuScene(BaseScene):
     def __init__(self, screen):
@@ -18,90 +18,28 @@ class BattleMenuScene(BaseScene):
         self.title_font = get_font(title_font_size)
         
         # 按钮配置 - 右侧阶梯布局
-        button_width = int(300 * UI_SCALE)
-        button_height = int(50 * UI_SCALE)
+        self.button_width = int(300 * UI_SCALE)
+        self.button_height = int(50 * UI_SCALE)
         
         # 起始位置（右侧）
-        base_x = int(WINDOW_WIDTH * 0.75)
-        start_y = int(WINDOW_HEIGHT * 0.25)
-        button_spacing = int(90 * UI_SCALE)
-        stagger_offset = int(30 * UI_SCALE)  # 阶梯偏移
+        self.base_x = int(WINDOW_WIDTH * 0.75)
+        self.start_y = int(WINDOW_HEIGHT * 0.25)
+        self.button_spacing = int(90 * UI_SCALE)
+        self.stagger_offset = int(30 * UI_SCALE)  # 阶梯偏移
         
+        # 货币和等级 UI
+        self.currency_ui = CurrencyLevelUI()
+        self.currency_ui.load_state()
+
         self.buttons = []
-        
-        # 战斗1
-        battle_btn1 = MenuButton(
-            base_x, 
-            start_y,
-            button_width, 
-            button_height,
-            "单人战役",
-            color=(200, 50, 50),
-            hover_color=(255, 80, 80),
-            on_click=lambda: self.switch_to("simple_battle")
-        )
-        self.buttons.append(battle_btn1)
-
-        # 战斗2
-        battle_btn2 = MenuButton(
-            base_x - stagger_offset, 
-            start_y + button_spacing,
-            button_width, 
-            button_height,
-            "局域网 卡组对战",
-            color=(200, 70, 50),
-            hover_color=(255, 100, 80),
-            on_click=lambda: self.switch_to("simple_battle")
-        )
-        self.buttons.append(battle_btn2)
-
-        # 战斗3
-        battle_btn3 = MenuButton(
-            base_x - stagger_offset * 2, 
-            start_y + button_spacing * 2,
-            button_width, 
-            button_height,
-            "局域网 任选对战",
-            color=(200, 90, 50),
-            hover_color=(255, 120, 80),
-            on_click=lambda: self.switch_to("simple_battle")
-        )
-        self.buttons.append(battle_btn3)
-
-        # 战斗4
-        battle_btn4 = MenuButton(
-            base_x - stagger_offset * 3, 
-            start_y + button_spacing * 3,
-            button_width, 
-            button_height,
-            "本地 任选对战（双人）",
-            color=(200, 110, 50),
-            hover_color=(255, 140, 80),
-            on_click=lambda: self.switch_to("draft_scene")
-        )
-        self.buttons.append(battle_btn4)
-
-        # 返回主菜单按钮
-        back_btn = MenuButton(
-            base_x - stagger_offset * 4,
-            start_y + button_spacing * 4,
-            button_width,
-            button_height,
-            "返回主菜单",
-            color=(100, 150, 255),
-            hover_color=(150, 200, 255),
-            on_click=lambda: self.switch_to("main_menu")
-        )
-        self.buttons.append(back_btn)
-        
-        self.quit_flag = False
+        self.create_buttons() # 创建按钮列表
+        self.quit_flag = False  # 退出标志
         
     def quit_game(self):
         """退出游戏"""
         self.quit_flag = True
     
     def handle_event(self, event):
-        """处理事件"""
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 self.quit_flag = True
@@ -115,18 +53,14 @@ class BattleMenuScene(BaseScene):
             button.handle_event(event)
     
     def update(self, dt):
-        """更新"""
-        # 更新背景
-        self.background.update(dt)
+        self.background.update(dt) # 背景
         
         # 更新按钮动画
         for button in self.buttons:
             button.update(dt)
     
     def draw(self):
-        """绘制"""
-        # 绘制背景
-        self.background.draw(self.screen)
+        self.background.draw(self.screen) # 背景
         
         # 绘制标题
         title_text = self.title_font.render("选择对战模式", True, (255, 215, 0))
@@ -139,7 +73,65 @@ class BattleMenuScene(BaseScene):
                                                    int(WINDOW_HEIGHT * 0.12) + shadow_offset))
         self.screen.blit(shadow_text, shadow_rect)
         self.screen.blit(title_text, title_rect)
+
+        self.currency_ui.draw(self.screen) # 货币和等级 UI
         
         # 绘制按钮
         for button in self.buttons:
             button.draw(self.screen)
+
+    def create_buttons(self):
+        # 单人战役
+        battle_btn1 = MenuButton(
+            self.base_x, self.start_y,
+            self.button_width, self.button_height,
+            "单人战役",
+            color=(200, 50, 50), hover_color=(255, 80, 80),
+            on_click=lambda: self.switch_to("simple_battle")
+        )
+        self.buttons.append(battle_btn1)
+
+        # 局域网 卡组对战
+        battle_btn2 = MenuButton(
+            self.base_x - self.stagger_offset, 
+            self.start_y + self.button_spacing,
+            self.button_width, self.button_height,
+            "局域网 卡组对战",
+            color=(200, 70, 50), hover_color=(255, 100, 80),
+            on_click=lambda: self.switch_to("simple_battle")
+        )
+        self.buttons.append(battle_btn2)
+
+        # 局域网 任选对战
+        battle_btn3 = MenuButton(
+            self.base_x - self.stagger_offset * 2, 
+            self.start_y + self.button_spacing * 2,
+            self.button_width, self.button_height,
+            "局域网 任选对战",
+            color=(200, 90, 50), hover_color=(255, 120, 80),
+            on_click=lambda: self.switch_to("simple_battle")
+        )
+        self.buttons.append(battle_btn3)
+
+        # 本地 任选对战（双人）
+        battle_btn4 = MenuButton(
+            self.base_x - self.stagger_offset * 3, 
+            self.start_y + self.button_spacing * 3,
+            self.button_width, self.button_height,
+            "本地 任选对战（双人）",
+            color=(200, 110, 50), hover_color=(255, 140, 80),
+            on_click=lambda: self.switch_to("draft_scene")
+        )
+        self.buttons.append(battle_btn4)
+
+        # 返回主菜单
+        back_btn = MenuButton(
+            self.base_x - self.stagger_offset * 4,
+            self.start_y + self.button_spacing * 4,
+            self.button_width, self.button_height,
+            "返回主菜单",
+            color=(100, 150, 255), hover_color=(150, 200, 255),
+            on_click=lambda: self.switch_to("main_menu")
+        )
+        self.buttons.append(back_btn)
+        

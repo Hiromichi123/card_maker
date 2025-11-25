@@ -105,7 +105,6 @@ def get_chinese_font():
     # 查找可用字体
     for font_path in font_paths:
         if os.path.exists(font_path):
-            print(f"使用中文字体: {font_path}")
             return font_path
     
     print("警告: 未找到中文字体，将使用默认字体")
@@ -120,3 +119,4 @@ def get_font(size):
         return pygame.font.Font(CHINESE_FONT_PATH, size)
     else:
         return pygame.font.Font(None, size)
+    
