@@ -5,7 +5,7 @@ from config import *
 from startup import SplashScreen
 from ui.transition import Transition
 from scenes.menu import MainMenuScene
-from scenes.gacha import GachaScene
+from scenes.gacha_scene import GachaScene
 from scenes.collection import CollectionScene
 from scenes.deck_builder_scene import DeckBuilderScene
 from scenes.battle_menu import BattleMenuScene
@@ -52,7 +52,7 @@ class SceneManager:
         self.scenes["main_menu"] = MainMenuScene(self.screen)
         self.scenes["gacha"] = GachaScene(self.screen)
         self.scenes["collection"] = CollectionScene(self.screen)
-        #self.scenes["deck_builder"] = DeckBuilderScene(self.screen)
+        self.scenes["deck_builder"] = DeckBuilderScene(self.screen)
         self.scenes["battle_menu"] = BattleMenuScene(self.screen)
         self.scenes["draft_scene"] = DraftScene(self.screen)
         self.scenes["draft_battle"] = DraftBattleScene(self.screen)

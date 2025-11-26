@@ -16,18 +16,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ASSETS_PATH = os.path.join(BASE_DIR, "assets") # 资源路径
 CARD_BASE_PATH = os.path.join(ASSETS_PATH, "outputs") # 卡牌路径
 
-# 概率配置
-CARD_PROBABILITIES = {
-    "SSS": 0.5,  # SSS - 0.5%
-    "SS": 2,     # SS - 2%
-    "S": 4,      # S - 4%
-    "A": 8.5,    # A - 8.5%
-    "B": 15,     # B - 15%
-    "C": 30,     # C - 30%
-    "D": 40      # D - 20%
-}
-
-# 颜色设置（按等级）
+# 颜色设置
 COLORS = {
     "SSS": (255, 0, 0),    # 红色 - SSS
     "SS": (255, 100, 20),  # 橙色 - SS

@@ -5,7 +5,7 @@ import glob
 import json
 from PIL import Image, ImageDraw, ImageFont
 
-dir = "#elna"
+dir = "D"
 cards_path = "D:\\Github\\card_maker\\assets\\cards\\" + dir
 frame_path = "D:\\Github\\card_maker\\assets\\cards\\frame.png"
 json_path = "D:\\Github\\card_maker\\assets\\cards\\" + dir + "\\cards.json"

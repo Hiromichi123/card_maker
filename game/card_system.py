@@ -5,6 +5,18 @@ import pygame
 from config import *
 from utils.card_database import get_card_database, CardData
 
+# 常驻卡池概率
+CARD_PROBABILITIES = {
+    "SSS": 0.5,  # SSS - 0.5%
+    "SS": 1.5,   # SS - 1.5%
+    "S": 2.5,    # S - 2.5%
+    "A": 8.5,    # A - 8.5%
+    #=====以上13%，以下87%=====
+    "B": 17,     # B - 17%
+    "C": 30,     # C - 30%
+    "D": 40      # D - 40%
+}
+
 # 抽卡参数
 CARD_WIDTH = 360  #原720
 CARD_HEIGHT = 540 #原1080
@@ -278,9 +290,9 @@ class CardSystem:
         self.animation_start_time = 0
         self.is_animating = False
         
-    def draw_one_card(self):
+    def draw_one_card(self, prob=CARD_PROBABILITIES):
         """单抽"""
-        card_pool = self.get_card_pool()
+        card_pool = self.get_card_pool(prob=prob)
         level_dir, card_path = self.draw_single_card(card_pool)
         position = ((WINDOW_WIDTH - CARD_WIDTH) // 2, 
                     (WINDOW_HEIGHT - CARD_HEIGHT) // 2)
@@ -290,16 +302,15 @@ class CardSystem:
         self.is_animating = True
         return card
 
-    
-    def draw_ten_cards(self):
+    def draw_ten_cards(self, prob=CARD_PROBABILITIES):
         """十连抽"""
         self.cards = []
         drawn_cards = []
         
-        card_pool = self.get_card_pool()
+        card_pool = self.get_card_pool(prob=prob)
         
         for i in range(TOTAL_CARDS):
-            level_dir, card_path = self.draw_single_card(card_pool)
+            level_dir, card_path = self.draw_single_card(card_pool, prob=prob)
             row = i // CARDS_PER_ROW
             col = i % CARDS_PER_ROW
             
@@ -317,9 +328,9 @@ class CardSystem:
         self.is_animating = True
         return drawn_cards
     
-    def get_card_pool(self):
-        """获取卡池"""
-        pool = {level_dir: [] for level_dir in CARD_PROBABILITIES.keys()}
+    def get_card_pool(self, prob=CARD_PROBABILITIES):
+        """获取卡池，默认常驻卡池"""
+        pool = {level_dir: [] for level_dir in prob.keys()}
         
         for level_dir in pool.keys():
             level_path = os.path.join("assets/outputs", level_dir) # 不能使用配置中的绝对路径
@@ -334,12 +345,12 @@ class CardSystem:
         
         return pool
     
-    def draw_single_card(self, card_pool):
+    def draw_single_card(self, card_pool, prob=CARD_PROBABILITIES):
         """抽取单张卡牌"""
         rand = random.randint(1, 100)
         cumulative = 0
         
-        for level_dir, probability in CARD_PROBABILITIES.items():
+        for level_dir, probability in prob.items():
             cumulative += probability
             if rand <= cumulative:
                 if card_pool[level_dir]:

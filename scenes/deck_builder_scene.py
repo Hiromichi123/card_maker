@@ -31,7 +31,7 @@ rows = 4
 card_width = int(216 * UI_SCALE)
 card_height = int(324 * UI_SCALE)
 card_spacing = int(30 * UI_SCALE)
-cards_per_row = 6
+cards_per_row = 5
 
 """可拖拽的卡牌类"""
 class DraggableCard:
