@@ -11,7 +11,7 @@ GAME_TITLE = "Card Battle Master Simulator v0.5.0"
 
 # 海报跳转映射表：index -> scene_name
 poster_to_scene = {
-    0: "gacha",
+    0: "gacha_menu",
     1: "battle_menu"
 }
 
@@ -120,7 +120,7 @@ class MainMenuScene(BaseScene):
             self.button_width, self.button_height,
             "抽卡",
             color=(255, 140, 0), hover_color=(255, 180, 50), text_color=(25, 25, 25),
-            on_click=lambda: self.switch_to("gacha")
+            on_click=lambda: self.switch_to("gacha_menu")
         )
         self.buttons.append(gacha_btn)
 

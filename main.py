@@ -6,6 +6,7 @@ from startup import SplashScreen
 from ui.transition import Transition
 from scenes.menu import MainMenuScene
 from scenes.gacha_scene import GachaScene
+from scenes.gacha_menu import GachaMenuScene
 from scenes.collection import CollectionScene
 from scenes.deck_builder_scene import DeckBuilderScene
 from scenes.battle_menu import BattleMenuScene
@@ -50,6 +51,7 @@ class SceneManager:
     """注册所有场景"""
     def register_scenes(self):
         self.scenes["main_menu"] = MainMenuScene(self.screen)
+        self.scenes["gacha_menu"] = GachaMenuScene(self.screen)
         self.scenes["gacha"] = GachaScene(self.screen)
         self.scenes["collection"] = CollectionScene(self.screen)
         self.scenes["deck_builder"] = DeckBuilderScene(self.screen)
