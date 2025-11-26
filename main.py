@@ -39,11 +39,7 @@ class SceneManager:
         self.transition = Transition()
         self.pending_scene = None  # 等待切换的场景
         
-        # 直接注册并切换主菜单（旧）
-        #self.register_scenes() # 注册场景
-        #self.switch_scene("main_menu") # 切换到主菜单
-        
-        # 启动画面，在淡出完成后再注册场景并切换到主菜单(新)
+        # 启动画面，在淡出完成后再注册场景并切换到主菜单
         self.splash = SplashScreen()
         # 开始后台加载（loader 在后台线程运行，on_finished 在主线程 splash 完成时调用）
         self.splash.start_loading(loader_func=self._background_load, on_finished=self._on_splash_finished)
@@ -51,13 +47,13 @@ class SceneManager:
     """注册所有场景"""
     def register_scenes(self):
         self.scenes["main_menu"] = MainMenuScene(self.screen)
-        self.scenes["gacha_menu"] = GachaMenuScene(self.screen)
-        self.scenes["gacha"] = GachaScene(self.screen)
-        self.scenes["collection"] = CollectionScene(self.screen)
-        self.scenes["deck_builder"] = DeckBuilderScene(self.screen)
+        #self.scenes["gacha_menu"] = GachaMenuScene(self.screen)
+        #self.scenes["gacha"] = GachaScene(self.screen)
+        #self.scenes["collection"] = CollectionScene(self.screen)
+        #self.scenes["deck_builder"] = DeckBuilderScene(self.screen)
         self.scenes["battle_menu"] = BattleMenuScene(self.screen)
-        self.scenes["draft_scene"] = DraftScene(self.screen)
-        self.scenes["draft_battle"] = DraftBattleScene(self.screen)
+        #self.scenes["draft_scene"] = DraftScene(self.screen)
+        #self.scenes["draft_battle"] = DraftBattleScene(self.screen)
         self.scenes["simple_battle"] = SimpleBattleScene(self.screen)
         
     def switch_scene(self, scene_name):

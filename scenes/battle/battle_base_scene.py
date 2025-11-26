@@ -10,6 +10,7 @@ from game.hand_card import HandManager, HandCard # 手牌管理器，手牌类
 from game.deck_renderer import DeckRenderer #　卡堆渲染器
 from game.card_animation import SlideAnimation # 滑动动画
 from game.card_animation import AttackAnimation # 攻击动画
+from game.skills import get_skill_registry, BattleContext, SkillTrigger # 技能系统
 
 # region  常量配置
 # 背景设置
@@ -761,30 +762,120 @@ class BattleBaseScene(BaseScene):
         return False
 
     def execute_attack(self, attacker_slot, defender_slot, defender_hp_ref):
-        """执行单次攻击"""
+        """执行单次攻击（集成技能系统）"""
         attacker_card = attacker_slot.card_data
         
-        # 创建攻击动画
-        attack_anim = AttackAnimation(attacker_slot, defender_slot if defender_slot.has_card() else None)
-        self.battle_animations.append(attack_anim)
+        # 创建战斗上下文
+        context = BattleContext(self)
         
-        if defender_slot.has_card():
-            # 攻击卡牌
-            defender_card = defender_slot.card_data
-            old_hp = defender_card.hp
-            new_hp = old_hp - attacker_card.atk
-            defender_card.hp = new_hp
-            
-            defender_slot.card_data = defender_card # 更新槽位数据
-            defender_slot.start_hp_flash(old_hp, new_hp) # 触发HP闪烁
+        # 设置攻击者和防御者
+        attacker_owner = "player" if attacker_slot in self.player_battle_slots else "enemy"
+        context.set_attacker(attacker_slot, attacker_owner)
+        
+        if defender_slot and defender_slot.has_card():
+            defender_owner = "player" if defender_slot in self.player_battle_slots else "enemy"
+            context.set_defender(defender_slot, defender_owner)
         else:
-            # 攻击玩家
-            if defender_hp_ref == "player":
-                self.player_current_hp -= attacker_card.atk
-                self.player_health_bar.set_hp(self.player_current_hp)
+            context.defender_slot = None
+        
+        # 获取攻击者的技能
+        skill_registry = get_skill_registry()
+        skills = skill_registry.get_skills_from_traits(attacker_card.traits)
+        
+        # 定义普通攻击执行函数（在技能动画完成后调用）
+        def execute_normal_attack():
+            # 普通攻击动画
+            attack_anim = AttackAnimation(attacker_slot, context.defender_slot if context.defender_slot and context.defender_slot.has_card() else None)
+            self.battle_animations.append(attack_anim)
+            
+            # 普通攻击伤害
+            if context.defender_slot and context.defender_slot.has_card():
+                # 攻击卡牌
+                defender_card = context.defender_slot.card_data
+                
+                # 计算基础伤害
+                base_damage = attacker_card.atk
+                
+                # 检查防御者是否有防御技能（ON_DAMAGED触发）
+                defender_skills = skill_registry.get_skills_from_traits(defender_card.traits)
+                context.damage_amount = base_damage  # 将伤害存入context
+                
+                # 设置防御者上下文
+                defender_owner = "player" if context.defender_slot in self.player_battle_slots else "enemy"
+                original_attacker = context.attacker_slot
+                context.set_attacker(context.defender_slot, defender_owner)  # 临时切换为防御者视角
+                
+                # 触发防御技能
+                shield_animations = []
+                for skill in defender_skills:
+                    on_damaged_effects = skill.get_effects_by_trigger(SkillTrigger.ON_DAMAGED)
+                    for effect in on_damaged_effects:
+                        if effect.can_trigger(context):
+                            # 执行防御效果（修改context.damage_amount）
+                            effect.execute(context)
+                            # 获取盾牌动画
+                            shield_anim = effect.get_animation(context)
+                            if shield_anim:
+                                shield_anim.start()
+                                shield_animations.append(shield_anim)
+                                self.battle_animations.append(shield_anim)
+                
+                # 恢复攻击者上下文
+                context.attacker_slot = original_attacker
+                
+                # 应用减伤后的伤害
+                final_damage = context.damage_amount
+                old_hp = defender_card.hp
+                new_hp = old_hp - final_damage
+                defender_card.hp = new_hp
+                
+                context.defender_slot.card_data = defender_card
+                context.defender_slot.start_hp_flash(old_hp, new_hp)
             else:
-                self.enemy_current_hp -= attacker_card.atk
-                self.enemy_health_bar.set_hp(self.enemy_current_hp)
+                # 攻击玩家（飞行等技能可能清空了defender_slot）
+                if defender_hp_ref == "player":
+                    self.player_current_hp -= attacker_card.atk
+                    self.player_health_bar.set_hp(self.player_current_hp)
+                else:
+                    self.enemy_current_hp -= attacker_card.atk
+                    self.enemy_health_bar.set_hp(self.enemy_current_hp)
+            
+            # 执行 AFTER_ATTACK 技能（如吸血）
+            for skill in skills:
+                after_effects = skill.get_effects_by_trigger(SkillTrigger.AFTER_ATTACK)
+                for effect in after_effects:
+                    if effect.can_trigger(context):
+                        effect.execute(context)
+        
+        # 1. 收集所有技能动画
+        skill_animations = []
+        for skill in skills:
+            before_effects = skill.get_effects_by_trigger(SkillTrigger.BEFORE_ATTACK)
+            for effect in before_effects:
+                if effect.can_trigger(context):
+                    skill_anim = effect.get_animation(context)
+                    if skill_anim:
+                        # 为每个动画创建独立的伤害回调（使用闭包捕获当前effect）
+                        def create_damage_callback(eff):
+                            def execute_skill_damage():
+                                eff.execute(context)
+                            return execute_skill_damage
+                        
+                        skill_anim.on_hit = create_damage_callback(effect)
+                        skill_animations.append(skill_anim)
+                        break  # 每个技能只取第一个效果
+        
+        # 2. 播放所有技能动画，只在最后一个动画完成时执行普通攻击
+        if skill_animations:
+            for i, anim in enumerate(skill_animations):
+                # 只有最后一个动画完成时才执行普通攻击
+                if i == len(skill_animations) - 1:
+                    anim.on_complete = execute_normal_attack
+                anim.start()
+                self.battle_animations.append(anim)
+        else:
+            # 没有技能动画，直接执行普通攻击
+            execute_normal_attack()
 
     def process_waiting_area(self):
         """处理双方准备区 减少CD"""

@@ -24,6 +24,7 @@ class CardData:
         self.level = self.RARITY_TO_LEVEL.get(rarity, 3)  # 根据稀有度计算等级
         self.atk = atk
         self.hp = hp
+        self.max_hp = hp  # 记录最大生命值（用于技能系统判定）
         self.cd = cd
         self.traits = traits if traits else []
         self.description = description
