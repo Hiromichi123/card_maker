@@ -1,4 +1,4 @@
-"""抽卡菜单场景 - 仪表盘滚动版"""
+"""抽卡菜单场景"""
 import pygame
 import math
 from config import *
@@ -24,7 +24,7 @@ DASHBOARD_BTN_WIDTH = int(DASHBOARD_WIDTH * 0.8)
 DASHBOARD_BTN_SPACING = int(DASHBOARD_HEIGHT * 0.01)
 
 # 呼吸效果参数
-GLOW_SPEED = 5  # 呼吸速度（越大越快）
+GLOW_SPEED = 5  # 呼吸速度
 GLOW_BASE_COLOR = (255, 215, 180)  # 淡金色 RGB
 GLOW_INTENSITY_R = 0  # 红色通道呼吸强度
 GLOW_INTENSITY_G = 30  # 绿色通道呼吸强度
@@ -34,34 +34,62 @@ GLOW_INTENSITY_B = 30  # 蓝色通道呼吸强度
 HIGHLIGHT_BOX_HEIGHT = int(90 * UI_SCALE)  # 选中框高度
 HIGHLIGHT_GLOW_SPEED = 6  # 选中框呼吸速度
 HIGHLIGHT_BORDER_WIDTH = 3  # 选中框边框宽度
-HIGHLIGHT_BASE_ALPHA = 100  # 选中框基础透明度
-HIGHLIGHT_ALPHA_RANGE = 75  # 选中框透明度呼吸范围
+HIGHLIGHT_BASE_ALPHA = 75  # 选中框基础透明度
+HIGHLIGHT_ALPHA_RANGE = 25  # 选中框透明度呼吸范围
 
 # 功能按钮位置参数
 BUTTON_X_RATIO = 0.6  # 按钮 X 位置比例（相对窗口宽度）
-ENTER_GACHA_Y_RATIO = 0.7  # "进入抽卡" 按钮 Y 位置比例
-BACK_BUTTON_Y_RATIO = 0.8  # "返回主菜单" 按钮 Y 位置比例
-BUTTON_WIDTH = int(200 * UI_SCALE)  # 功能按钮宽度
-BUTTON_HEIGHT = int(50 * UI_SCALE)  # 功能按钮高度
+ENTER_GACHA_Y_RATIO = 0.8  # "进入抽卡" 按钮 Y 位置比例
+BACK_BUTTON_Y_RATIO = 0.85  # "返回主菜单" 按钮 Y 位置比例
+BUTTON_WIDTH = int(250 * UI_SCALE)  # 功能按钮宽度
+BUTTON_HEIGHT = int(80 * UI_SCALE)  # 功能按钮高度
 
-# 卡池配置列表
+# 卡牌展示区域参数
+SHOWCASE_X_RATIO = 0.45  # 展示区域 X 位置比例
+SHOWCASE_Y_RATIO = 0.30   # 展示区域 Y 位置比例
+SHOWCASE_WIDTH_RATIO = 0.4  # 展示区域宽度比例
+SHOWCASE_HEIGHT_RATIO = 0.6  # 展示区域高度比例
+CARD_WIDTH = int(300 * UI_SCALE)  # 展示卡宽度
+CARD_HEIGHT = int(450 * UI_SCALE)  # 展示卡高度
+CARD_HOVER_SCALE = 1.15  # 悬停时放大倍数
+CARD_HOVER_ELEVATION = int(10 * UI_SCALE)  # 悬停时提升高度
+CARD_SHADOW_OFFSET = int(5 * UI_SCALE)  # 阴影偏移
+
+# 卡牌布局间距参数（相较与卡宽）
+CARD_HORIZONTAL_SPACING_RATIO = 0.3  # 水平排列时卡牌间距比例
+CARD_FAN_RADIUS_RATIO = 2.0  # 扇形排列时半径比例
+CARD_FAN_CENTER_Y_OFFSET_RATIO = 0.28  # 扇形排列时中心点Y偏移比例
+CARD_FAN_ANGLE_START = -90  # 扇形排列起始角度
+CARD_FAN_ANGLE_RANGE = 180  # 扇形排列角度范围
+CARD_DOUBLE_FAN_INNER_RATIO = 0.50  # 双层扇形内环半径比例
+CARD_DOUBLE_FAN_OUTER_RATIO = 1.15  # 双层扇形外环半径比例
+CARD_DOUBLE_FAN_RATE = 0.3  # 双层扇形前后层卡牌比例，50%表示均分
+CARD_GRID_OFFSET_X_RATIO = 0.056  # 网格排列随机偏移X比例
+CARD_GRID_OFFSET_Y_RATIO = 0.042  # 网格排列随机偏移Y比例
+
+# 字体大小
+TITLE_FONT_SIZE = int(80 * UI_SCALE) # 主标题字体大小
+DESC_FONT_SIZE = int(40 * UI_SCALE) # 描述字体大小
+POOL_NAME_FONT_SIZE = int(45 * UI_SCALE) # 卡池名称字体大小
+
+# 卡池配置列表&展示卡牌
 GACHA_POOLS = [
     {"id": "normal", "name": "常规卡池", "bg_type": "bg/gacha_normal", "description": "常驻卡池，标准概率",
-     "showcase_cards": ["10001", "10002", "10003", "10004", "10005"]},  # 展示卡牌ID列表
+     "showcase_cards": ["D_001", "C_001", "B_001", "A_001", "S_001", "SS_001", "SSS_001", "SS_002", "S_002", "A_002", "B_002", "C_002", "D_002"]},
     {"id": "activity", "name": "活动卡池", "bg_type": "bg/gacha_activity", "description": "限时活动卡池，提高概率",
-     "showcase_cards": ["20001", "20002", "20003", "20004"]},
+     "showcase_cards": ["SSS_001", "SSS_002", "SSS_003", "SSS_004", "SS_001", "SS_002", "S_001", "S_002"]},
     {"id": "special", "name": "特别卡池", "bg_type": "bg/gacha_special", "description": "特别卡池，高级卡牌",
-     "showcase_cards": ["30001", "30002", "30003", "30004", "30005", "30006"]},
+     "showcase_cards": ["SS_001", "SS_002", "SS_003", "SS_004", "SS_005", "SS_006"]},
     {"id": "holiday", "name": "节日卡池", "bg_type": "bg/gacha_holiday", "description": "节日限定卡池",
-     "showcase_cards": ["40001", "40002", "40003"]},
+     "showcase_cards": ["A_003", "S_003", "SS_003", "SSS_003"]},
     {"id": "SSS限定", "name": "SSS限定卡池", "bg_type": "bg/gacha_sss", "description": "SSS特殊卡池",
-     "showcase_cards": ["50001", "50002"]},
+     "showcase_cards": ["SSS_003", "SSS_004", "SSS_005"]},
     {"id": "SS限定", "name": "SS限定", "bg_type": "bg/gacha_ss", "description": "SS特殊卡池",
-     "showcase_cards": ["60001", "60002", "60003"]},
+     "showcase_cards": ["SS_001", "SS_002", "SS_003"]},
     {"id": "S限定", "name": "S限定", "bg_type": "bg/gacha_s", "description": "S特殊卡池",
-     "showcase_cards": ["70001", "70002", "70003", "70004"]},
+     "showcase_cards": ["S_001", "S_002", "S_003"]},
     {"id": "A限定", "name": "A限定", "bg_type": "bg/gacha_a", "description": "A特殊卡池",
-     "showcase_cards": ["80001", "80002", "80003", "80004", "80005"]}
+     "showcase_cards": ["A_001", "A_002", "A_003", "A_004", "A_005"]}
 ]
 
 class GachaMenuScene(BaseScene):
@@ -74,10 +102,13 @@ class GachaMenuScene(BaseScene):
         self.is_snapping = False  # 是否正在吸附对齐
         self.background = self._create_background_for_pool(self.selected_pool_index)
         
+        # 图片缓存（避免每帧重新加载）
+        self.card_image_cache = {}  # key: (image_path, width, height), value: scaled surface
+        
         # 字体
-        self.title_font = get_font(max(32, int(64 * UI_SCALE)))
-        self.pool_name_font = get_font(max(20, int(36 * UI_SCALE)))
-        self.desc_font = get_font(max(12, int(24 * UI_SCALE)))
+        self.title_font = get_font(TITLE_FONT_SIZE)
+        self.desc_font = get_font(DESC_FONT_SIZE)
+        self.pool_name_font = get_font(POOL_NAME_FONT_SIZE)
         
         # 按钮配置
         self.button_height = int(120 * UI_SCALE)
@@ -192,44 +223,69 @@ class GachaMenuScene(BaseScene):
             pool = GACHA_POOLS[self.selected_pool_index]
             card_ids = pool.get("showcase_cards", [])
             self.showcase_cards = []
+            
             for card_id in card_ids:
-                card_data = self.card_db.get_card(card_id)
-                if card_data:
-                    self.showcase_cards.append(card_data)
+                # 解析格式："等级_编号"，如 "A_001"
+                if "_" in card_id:
+                    parts = card_id.split("_")
+                    if len(parts) == 2:
+                        level, number = parts
+                        # 从指定等级目录加载卡牌
+                        card_data = self.card_db.get_card_by_level(level, number)
+                        if card_data:
+                            self.showcase_cards.append(card_data)
+                else:
+                    # 兼容旧格式（纯数字ID）
+                    card_data = self.card_db.get_card(card_id)
+                    if card_data:
+                        self.showcase_cards.append(card_data)
+            
             self._layout_showcase_cards()
     
     def _layout_showcase_cards(self):
-        """艺术性布局卡牌 - 扇形/螺旋排列"""
+        """卡牌布局"""
         self.card_rects = []
         if not self.showcase_cards:
             return
         
-        # 展示区域配置
-        showcase_x = int(WINDOW_WIDTH * 0.35)
-        showcase_y = int(WINDOW_HEIGHT * 0.3)
-        showcase_width = int(WINDOW_WIDTH * 0.25)
-        showcase_height = int(WINDOW_HEIGHT * 0.6)
-        
-        card_width = int(120 * UI_SCALE)
-        card_height = int(160 * UI_SCALE)
-        
         num_cards = len(self.showcase_cards)
         
-        if num_cards <= 3:
-            # 少量卡牌：水平排列
-            spacing = (showcase_width - card_width) // max(1, num_cards - 1) if num_cards > 1 else 0
-            for i, card in enumerate(self.showcase_cards):
-                x = showcase_x + i * spacing
-                y = showcase_y + showcase_height // 2 - card_height // 2
-                self.card_rects.append(pygame.Rect(x, y, card_width, card_height))
+        # 少于4张时才使用偏移
+        if num_cards < 4:
+            offset_x = int(WINDOW_WIDTH * -0.1)
+            offset_y = int(WINDOW_HEIGHT * -0.1)
+        else:
+            offset_x = 0
+            offset_y = 0
         
-        elif num_cards <= 5:
-            # 中等数量：扇形排列
+        showcase_x = int(WINDOW_WIDTH * SHOWCASE_X_RATIO) + offset_x
+        showcase_y = int(WINDOW_HEIGHT * SHOWCASE_Y_RATIO) + offset_y
+        showcase_width = int(WINDOW_WIDTH * SHOWCASE_WIDTH_RATIO)
+        showcase_height = int(WINDOW_HEIGHT * SHOWCASE_HEIGHT_RATIO)
+        
+        card_width = CARD_WIDTH
+        card_height = CARD_HEIGHT
+        
+        if num_cards < 4:
+            # 少量水平排列 - 使用放大尺寸
+            enlarged_width = int(360 * UI_SCALE)
+            enlarged_height = int(540 * UI_SCALE)
+            x_spacing = int(enlarged_width * CARD_HORIZONTAL_SPACING_RATIO)  # 等比放大间距
+            total_width = num_cards * enlarged_width + (num_cards - 1) * x_spacing if num_cards > 1 else enlarged_width
+            start_x = showcase_x + (showcase_width - total_width) // 2
+            y = showcase_y + (showcase_height - enlarged_height) // 2
+            
+            for i, card in enumerate(self.showcase_cards):
+                x = start_x + i * (enlarged_width + x_spacing)
+                self.card_rects.append(pygame.Rect(x, y, enlarged_width, enlarged_height))
+        
+        elif num_cards <= 7:
+            # 中量扇形排列
             center_x = showcase_x + showcase_width // 2
-            center_y = showcase_y + showcase_height // 2 + int(100 * UI_SCALE)
-            radius = int(200 * UI_SCALE)
-            angle_start = -60  # 起始角度
-            angle_range = 120  # 扇形角度范围
+            center_y = showcase_y + showcase_height // 2 + int(card_width * CARD_FAN_CENTER_Y_OFFSET_RATIO)
+            radius = int(card_width * CARD_FAN_RADIUS_RATIO)
+            angle_start = CARD_FAN_ANGLE_START
+            angle_range = CARD_FAN_ANGLE_RANGE
             
             for i, card in enumerate(self.showcase_cards):
                 angle = math.radians(angle_start + (angle_range / (num_cards - 1)) * i if num_cards > 1 else 0)
@@ -237,34 +293,33 @@ class GachaMenuScene(BaseScene):
                 y = int(center_y - radius * math.cos(angle) - card_height // 2)
                 self.card_rects.append(pygame.Rect(x, y, card_width, card_height))
         
-        else:
-            # 大量卡牌：螺旋/网格混合排列
-            cols = 3
-            rows = (num_cards + cols - 1) // cols
-            x_spacing = showcase_width // (cols + 1)
-            y_spacing = showcase_height // (rows + 1)
+        else: # 大量双层扇形排列
+            center_x = showcase_x + showcase_width // 2
+            center_y = showcase_y + showcase_height // 2 + int(card_width * CARD_FAN_CENTER_Y_OFFSET_RATIO)
             
-            for i, card in enumerate(self.showcase_cards):
-                col = i % cols
-                row = i // cols
-                x = showcase_x + x_spacing * (col + 1) - card_width // 2
-                y = showcase_y + y_spacing * (row + 1) - card_height // 2
-                # 添加轻微随机偏移增加艺术感
-                offset_x = int(20 * UI_SCALE * math.sin(i * 0.5))
-                offset_y = int(15 * UI_SCALE * math.cos(i * 0.7))
-                self.card_rects.append(pygame.Rect(x + offset_x, y + offset_y, card_width, card_height))
-    
-    def _update_showcase_cards(self):
-        """更新当前卡池的展示卡牌"""
-        if 0 <= self.selected_pool_index < len(GACHA_POOLS):
-            pool = GACHA_POOLS[self.selected_pool_index]
-            card_ids = pool.get("showcase_cards", [])
-            self.showcase_cards = []
-            for card_id in card_ids:
-                card_data = self.card_db.get_card(card_id)
-                if card_data:
-                    self.showcase_cards.append(card_data)
-            self._layout_showcase_cards()
+            # 使用全局比例参数分配卡牌到前后层
+            first_layer_count = int(num_cards * CARD_DOUBLE_FAN_RATE)  # 前层（内环）卡牌数量
+            second_layer_count = num_cards - first_layer_count  # 后层（外环）卡牌数量
+            
+            # 前层较小半径
+            radius_front = int(card_width * CARD_FAN_RADIUS_RATIO * CARD_DOUBLE_FAN_INNER_RATIO)
+            # 后层较大半径
+            radius_back = int(card_width * CARD_FAN_RADIUS_RATIO * CARD_DOUBLE_FAN_OUTER_RATIO)
+            angle_start = CARD_FAN_ANGLE_START
+            angle_range = CARD_FAN_ANGLE_RANGE
+            
+            # 先绘制后层（外环，较远的卡牌）
+            for i in range(second_layer_count):
+                angle = math.radians(angle_start + (angle_range / (second_layer_count - 1)) * i if second_layer_count > 1 else 0)
+                x = int(center_x + radius_back * math.sin(angle) - card_width // 2)
+                y = int(center_y - radius_back * math.cos(angle) - card_height // 2)
+                self.card_rects.append(pygame.Rect(x, y, card_width, card_height))
+            # 再绘制前层（内环，较近的卡牌）
+            for i in range(first_layer_count):
+                angle = math.radians(angle_start + (angle_range / (first_layer_count - 1)) * i if first_layer_count > 1 else 0)
+                x = int(center_x + radius_front * math.sin(angle) - card_width // 2)
+                y = int(center_y - radius_front * math.cos(angle) - card_height // 2)
+                self.card_rects.append(pygame.Rect(x, y, card_width, card_height))
     
     def _enter_gacha(self):
         """进入抽卡场景"""
@@ -343,7 +398,7 @@ class GachaMenuScene(BaseScene):
     
     def update(self, dt):
         self.blink_timer += dt
-        # 更新发光强度（平滑呼吸效果，参考 MenuButton）
+        # 更新发光强度（平滑呼吸效果，参考MenuButton）
         self.glow_intensity = (math.sin(self.blink_timer * GLOW_SPEED) + 1) / 2  # 0 to 1
         self.background.update(dt)
         
@@ -387,7 +442,6 @@ class GachaMenuScene(BaseScene):
             self.background = self._create_background_for_pool(center_index)
             self._update_pool_button_colors()
             self._update_showcase_cards()  # 更新展示卡牌
-            self._update_showcase_cards()  # 更新展示卡牌
         
         # 更新选中按钮的闪烁颜色
         if 0 <= self.selected_pool_index < len(self.dashboard_buttons):
@@ -401,33 +455,41 @@ class GachaMenuScene(BaseScene):
         # 绘制卡牌展示
         self._draw_showcase_cards()
         
-        # 绘制右侧信息和按钮
-        self._draw_pool_info()
+        # 绘制功能按钮
         self.enter_gacha_button.draw(self.screen)
         self.back_button.draw(self.screen)
         
         # 绘制卡牌提示框（最后绘制，在最上层）
         if self.card_tooltip.visible:
             self.card_tooltip.draw(self.screen)
-        
-        # 绘制卡牌提示框（最后绘制，在最上层）
-        if self.card_tooltip.visible:
-            self.card_tooltip.draw(self.screen)
     
     def _draw_title(self):
-        title_y = int(WINDOW_HEIGHT * 0.06)
-        title_text = self.title_font.render("选择卡池", True, (255, 215, 0))
-        title_rect = title_text.get_rect(center=(WINDOW_WIDTH // 2, title_y))
-        
-        shadow_offset = max(2, int(2 * UI_SCALE))
-        shadow_text = self.title_font.render("选择卡池", True, (0, 0, 0))
-        shadow_rect = shadow_text.get_rect(center=(
-            WINDOW_WIDTH // 2 + shadow_offset,
-            title_y + shadow_offset
-        ))
-        
-        self.screen.blit(shadow_text, shadow_rect)
-        self.screen.blit(title_text, title_rect)
+        """绘制标题：显示当前选中卡池的名称和描述"""
+        if 0 <= self.selected_pool_index < len(GACHA_POOLS):
+            pool = GACHA_POOLS[self.selected_pool_index]
+            
+            # 主标题：卡池名称（使用闪烁颜色）
+            title_y = int(WINDOW_HEIGHT * 0.06)
+            blink_color = self._get_blink_color()
+            title_text = self.title_font.render(pool["name"], True, blink_color)
+            title_rect = title_text.get_rect(center=(WINDOW_WIDTH // 2, title_y))
+            
+            # 阴影
+            shadow_offset = max(2, int(2 * UI_SCALE))
+            shadow_text = self.title_font.render(pool["name"], True, (0, 0, 0))
+            shadow_rect = shadow_text.get_rect(center=(
+                WINDOW_WIDTH // 2 + shadow_offset,
+                title_y + shadow_offset
+            ))
+            
+            self.screen.blit(shadow_text, shadow_rect)
+            self.screen.blit(title_text, title_rect)
+            
+            # 副标题：卡池描述
+            subtitle_y = title_y + int(70 * UI_SCALE)
+            subtitle_text = self.desc_font.render(pool["description"], True, (128, 0, 128))
+            subtitle_rect = subtitle_text.get_rect(center=(WINDOW_WIDTH // 2, subtitle_y))
+            self.screen.blit(subtitle_text, subtitle_rect)
     
     def _draw_pool_list(self):
         """绘制卡池列表"""
@@ -441,57 +503,28 @@ class GachaMenuScene(BaseScene):
             # 只绘制可见的按钮
             if -self.button_height < btn.rect.y < self. dashboard_view.height + self. button_height:
                 btn. draw(surface)
+                
+                # 如果是高亮选中的按钮，在上层覆盖红色文字
+                if i == self.selected_pool_index:
+                    highlight_font = get_font(int(40 * UI_SCALE))
+                    highlight_text = highlight_font.render(GACHA_POOLS[i]["name"], True, (255, 25, 25))
+                    highlight_rect = highlight_text.get_rect(center=(btn.rect.centerx, btn.rect.centery))
+                    surface.blit(highlight_text, highlight_rect)
             
             btn.rect.y = original_y
             btn. text_rect.centery = btn.rect.centery
         
         self.dashboard_view.end_draw(self.screen)
     
-    def _draw_pool_info(self):
-        """绘制当前选中卡池的信息"""
-        if 0 <= self.selected_pool_index < len(GACHA_POOLS):
-            pool = GACHA_POOLS[self.selected_pool_index]
-            
-            info_x = int(WINDOW_WIDTH * 0.7)
-            info_y = int(WINDOW_HEIGHT * 0.2)
-            
-            # 卡池名称（金色闪烁）- 参考 MenuButton 的多层发光
-            blink_color = self._get_blink_color()
-            name_center_x = info_x + int(150 * UI_SCALE)
-            
-            # 多层发光效果（呼吸式）
-            for i in range(3):
-                glow_alpha = int((100 - i * 30) * (0.5 + self.glow_intensity * 0.5))
-                glow_color = (255, 230, 100)
-                offset = (i + 1) * 2
-                
-                # 绘制发光层
-                for dx, dy in [(-offset, 0), (offset, 0), (0, -offset), (0, offset)]:
-                    glow_text = self.pool_name_font.render(pool["name"], True, glow_color)
-                    glow_text.set_alpha(glow_alpha)
-                    glow_rect = glow_text.get_rect(center=(name_center_x + dx, info_y + dy))
-                    self.screen.blit(glow_text, glow_rect)
-            
-            # 主文字
-            name_text = self.pool_name_font.render(pool["name"], True, blink_color)
-            name_rect = name_text.get_rect(center=(name_center_x, info_y))
-            self.screen.blit(name_text, name_rect)
-            
-            # 卡池描述
-            desc_text = self.desc_font.render(pool["description"], True, (220, 220, 220))
-            desc_rect = desc_text.get_rect(center=(info_x + int(150 * UI_SCALE), info_y + int(50 * UI_SCALE)))
-            self.screen.blit(desc_text, desc_rect)
-    
     def _draw_showcase_cards(self):
-        """绘制展示卡牌 - 艺术性排版"""
+        """绘制展示卡牌"""
         for i, (card, rect) in enumerate(zip(self.showcase_cards, self.card_rects)):
-            # 判断是否悬停
-            is_hovered = (i == self.hovered_card_index)
+            is_hovered = (i == self.hovered_card_index) # 判断是否悬停
             
             # 悬停时放大和提升
             if is_hovered:
-                scale = 1.15
-                elevation = int(10 * UI_SCALE)
+                scale = CARD_HOVER_SCALE
+                elevation = CARD_HOVER_ELEVATION
                 scaled_width = int(rect.width * scale)
                 scaled_height = int(rect.height * scale)
                 draw_rect = pygame.Rect(
@@ -504,58 +537,62 @@ class GachaMenuScene(BaseScene):
                 draw_rect = rect
             
             # 绘制卡牌阴影
-            shadow_offset = int(5 * UI_SCALE)
             shadow_rect = draw_rect.copy()
-            shadow_rect.x += shadow_offset
-            shadow_rect.y += shadow_offset
+            shadow_rect.x += CARD_SHADOW_OFFSET
+            shadow_rect.y += CARD_SHADOW_OFFSET
             shadow_surface = pygame.Surface((shadow_rect.width, shadow_rect.height), pygame.SRCALPHA)
             shadow_surface.fill((0, 0, 0, 100 if not is_hovered else 150))
             self.screen.blit(shadow_surface, shadow_rect)
             
-            # 绘制卡牌背景
-            card_surface = pygame.Surface((draw_rect.width, draw_rect.height), pygame.SRCALPHA)
-            
-            # 稀有度颜色边框
-            rarity_color = COLORS.get(card.rarity, (200, 200, 200))
-            pygame.draw.rect(card_surface, rarity_color, card_surface.get_rect(), border_radius=8)
-            
-            # 内部填充
-            inner_rect = pygame.Rect(3, 3, draw_rect.width - 6, draw_rect.height - 6)
-            pygame.draw.rect(card_surface, (40, 40, 50, 230), inner_rect, border_radius=6)
-            
-            # 绘制卡牌名称
-            name_font = get_font(max(14, int(20 * UI_SCALE)))
-            name_text = name_font.render(card.name[:6], True, (255, 255, 255))  # 限制长度
-            name_rect = name_text.get_rect(center=(draw_rect.width // 2, int(20 * UI_SCALE)))
-            card_surface.blit(name_text, name_rect)
-            
-            # 绘制稀有度标识
-            rarity_font = get_font(max(12, int(16 * UI_SCALE)))
-            rarity_text = rarity_font.render(f"LV:{card.rarity}", True, rarity_color)
-            rarity_rect = rarity_text.get_rect(center=(draw_rect.width // 2, int(45 * UI_SCALE)))
-            card_surface.blit(rarity_text, rarity_rect)
-            
-            # 绘制属性信息
-            attr_font = get_font(max(10, int(14 * UI_SCALE)))
-            atk_text = attr_font.render(f"ATK:{card.atk}", True, (255, 100, 100))
-            hp_text = attr_font.render(f"HP:{card.hp}", True, (100, 255, 100))
-            cd_text = attr_font.render(f"CD:{card.cd}", True, (255, 215, 100))
-            
-            y_offset = int(70 * UI_SCALE)
-            card_surface.blit(atk_text, (int(10 * UI_SCALE), y_offset))
-            card_surface.blit(hp_text, (int(10 * UI_SCALE), y_offset + int(20 * UI_SCALE)))
-            card_surface.blit(cd_text, (int(10 * UI_SCALE), y_offset + int(40 * UI_SCALE)))
-            
-            # 悬停发光效果
-            if is_hovered:
-                glow_surface = pygame.Surface((draw_rect.width + 20, draw_rect.height + 20), pygame.SRCALPHA)
-                for j in range(3):
-                    alpha = 80 - j * 25
-                    glow_color = (*rarity_color, alpha)
-                    offset = (j + 1) * 6
-                    glow_rect = pygame.Rect(offset, offset, draw_rect.width + 20 - offset * 2, draw_rect.height + 20 - offset * 2)
-                    pygame.draw.rect(glow_surface, glow_color, glow_rect, border_radius=10)
-                self.screen.blit(glow_surface, (draw_rect.x - 10, draw_rect.y - 10))
-            
-            # 最后绘制卡牌本体
-            self.screen.blit(card_surface, draw_rect)
+            # 加载并绘制卡牌图片
+            try:
+                if hasattr(card, 'image_path') and card.image_path:
+                    # 使用缓存避免重复加载和缩放
+                    cache_key = (card.image_path, draw_rect.width, draw_rect.height)
+                    if cache_key not in self.card_image_cache:
+                        # 首次加载时缓存
+                        original_image = pygame.image.load(card.image_path)
+                        scaled_image = pygame.transform.smoothscale(original_image, (draw_rect.width, draw_rect.height))
+                        self.card_image_cache[cache_key] = scaled_image
+                    
+                    card_image = self.card_image_cache[cache_key]
+                    
+                    # 悬停发光效果
+                    if is_hovered:
+                        rarity_color = COLORS.get(card.rarity, (200, 200, 200))
+                        glow_surface = pygame.Surface((draw_rect.width + 20, draw_rect.height + 20), pygame.SRCALPHA)
+                        for j in range(3):
+                            alpha = 80 - j * 25
+                            glow_color = (*rarity_color, alpha)
+                            offset = (j + 1) * 6
+                            glow_rect = pygame.Rect(offset, offset, draw_rect.width + 20 - offset * 2, draw_rect.height + 20 - offset * 2)
+                            pygame.draw.rect(glow_surface, glow_color, glow_rect, border_radius=10)
+                        self.screen.blit(glow_surface, (draw_rect.x - 10, draw_rect.y - 10))
+                    
+                    # 绘制卡牌图片
+                    self.screen.blit(card_image, draw_rect)
+                else:
+                    # 如果没有图片路径，绘制占位符
+                    placeholder = pygame.Surface((draw_rect.width, draw_rect.height), pygame.SRCALPHA)
+                    rarity_color = COLORS.get(card.rarity, (100, 100, 100))
+                    pygame.draw.rect(placeholder, rarity_color, placeholder.get_rect(), border_radius=8)
+                    inner_rect = pygame.Rect(3, 3, draw_rect.width - 6, draw_rect.height - 6)
+                    pygame.draw.rect(placeholder, (40, 40, 50, 230), inner_rect, border_radius=6)
+                    
+                    # 显示卡牌名称作为占位
+                    name_font = get_font(max(14, int(20 * UI_SCALE)))
+                    name_text = name_font.render(card.name[:6], True, (255, 255, 255))
+                    name_rect = name_text.get_rect(center=(draw_rect.width // 2, draw_rect.height // 2))
+                    placeholder.blit(name_text, name_rect)
+                    
+                    self.screen.blit(placeholder, draw_rect)
+                    
+            except Exception as e:
+                # 图片加载失败，绘制错误占位符
+                error_surface = pygame.Surface((draw_rect.width, draw_rect.height), pygame.SRCALPHA)
+                pygame.draw.rect(error_surface, (100, 100, 100), error_surface.get_rect(), border_radius=8)
+                error_font = get_font(max(12, int(16 * UI_SCALE)))
+                error_text = error_font.render("加载失败", True, (255, 100, 100))
+                error_rect = error_text.get_rect(center=(draw_rect.width // 2, draw_rect.height // 2))
+                error_surface.blit(error_text, error_rect)
+                self.screen.blit(error_surface, draw_rect)

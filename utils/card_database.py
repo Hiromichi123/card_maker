@@ -134,6 +134,17 @@ class CardDatabase:
         """根据ID获取卡牌"""
         return self.cards.get(card_id)
     
+    def get_card_by_level(self, level, number):
+        """
+        根据等级和编号获取卡牌
+        level: 等级字符串，如 "A", "SSS", "S" 等
+        number: 卡牌编号，如 "001", "002" 等
+        返回: CardData 或 None
+        """
+        # 构造完整的 card_id
+        card_id = f"{level}_{number}"
+        return self.cards.get(card_id)
+    
     def get_card_by_path(self, image_path):
         """根据图片路径获取卡牌"""
         normalized_path = image_path.replace('\\', '/')

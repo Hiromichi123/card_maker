@@ -16,6 +16,9 @@ card_spacing = int(30 * UI_SCALE)
 
 """图鉴卡牌显示类"""
 class CollectionCard:
+    # 图片缓存 避免重复加载和缩放
+    _image_cache = {}  # key: (path, width, height), value: scaled surface
+    
     def __init__(self, card_data, x, y, width, height):
         self.data = card_data
         self.rect = pygame.Rect(x, y, width, height)
@@ -28,19 +31,27 @@ class CollectionCard:
         self.load_image() # 加载图片
         
     def load_image(self):
-        """加载卡牌图片"""
+        """加载卡牌图片（使用缓存）"""
         try:
             if os.path.exists(self.data["path"]):
-                original = pygame.image.load(self.data["path"])
-                self.image = pygame.transform.smoothscale(
-                    original, (self.rect.width, self.rect.height)
-                )
+                # 使用缓存避免重复加载和缩放
+                cache_key = (self.data["path"], self.rect.width, self.rect.height)
+                if cache_key not in CollectionCard._image_cache:
+                    # 首次加载时缓存
+                    original = pygame.image.load(self.data["path"])
+                    scaled = pygame.transform.smoothscale(
+                        original, (self.rect.width, self.rect.height)
+                    )
+                    CollectionCard._image_cache[cache_key] = scaled.convert_alpha()
+                
+                self.image = CollectionCard._image_cache[cache_key]
             else:
                 self.image = self.create_placeholder()
         except:
             self.image = self.create_placeholder()
         
-        self.image = self.image.convert_alpha()
+        if not hasattr(self.image, 'get_alpha'):
+            self.image = self.image.convert_alpha()
     
     def create_placeholder(self):
         """创建占位符"""
