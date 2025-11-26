@@ -18,6 +18,7 @@ simple_prob = {
     "D": 40      # D - 40%
 }
 
+# 活动卡池概率
 activity_prob = {
     "SSS": 1.0,  # SSS - 1.0%
     "SS": 3.0,   # SS - 3.0%
@@ -29,6 +30,7 @@ activity_prob = {
     "D": 25      # D - 25%
 }
 
+# 高概率测试卡池
 high_prob = {
     "SSS": 20.0,  # SSS - 20.0%
     "SS": 20.0,   # SS - 20.0%
@@ -53,7 +55,7 @@ class GachaScene(BaseScene):
         
         # 创建按钮
         self.create_button()
-    
+
     """==========核心方法=========="""
     def handle_event(self, event):
         super().handle_event(event)
@@ -69,10 +71,10 @@ class GachaScene(BaseScene):
         self.draw_ten_button.handle_event(event)
         self.high_prob_button.handle_event(event)
         self.back_button.handle_event(event)
-    
+
     def update(self, dt):
         self.card_system.update(dt)
-    
+
     def get_hovered_card(self, mouse_pos):
         """获取鼠标悬停的卡牌数据"""
         for card in self.card_system.cards:
@@ -98,7 +100,7 @@ class GachaScene(BaseScene):
         self.card_system.draw(self.screen) # 卡牌
         self.draw_probability_info() # 概率信息
         self.draw_button() # 按钮
-    
+
     def draw_title(self):
         """绘制标题"""
         title_y = int(WINDOW_HEIGHT * 0.04)
@@ -112,7 +114,7 @@ class GachaScene(BaseScene):
         
         self.screen.blit(shadow_text, shadow_rect)
         self.screen.blit(title_text, title_rect)
-    
+
     def draw_probability_info(self, prob=simple_prob):
         """绘制概率信息"""
         y_offset = int(WINDOW_HEIGHT * 0.92)
@@ -143,7 +145,7 @@ class GachaScene(BaseScene):
             pygame.draw.line(bg, (40, 40, 60), (0, y), (WINDOW_WIDTH, y), 1)
         
         return bg
-    
+
     def create_button(self):
         button_width = int(300 * UI_SCALE)
         button_height = int(90 * UI_SCALE)
@@ -184,9 +186,9 @@ class GachaScene(BaseScene):
             WINDOW_WIDTH // 2 + button_spacing // 2,
             int(WINDOW_HEIGHT * 0.85),
             button_width, button_height,
-            "返回主菜单",
+            "返回",
             color=(100, 150, 255), hover_color=(130, 180, 255),
-            on_click=lambda: self.switch_to("main_menu")
+            on_click=lambda: self.switch_to("gacha_menu")
         )
 
     """==========抽卡辅助=========="""
@@ -195,7 +197,7 @@ class GachaScene(BaseScene):
         if not self.card_system.is_animating:
             drawn_card = self.card_system.draw_one_card(prob=prob)
             self.inventory.add_card(drawn_card.image_path, drawn_card.rarity) # 保存到库存
-    
+
     def draw_ten_cards(self, prob=simple_prob):
         """十连抽卡"""
         if not self.card_system.is_animating:
