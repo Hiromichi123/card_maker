@@ -147,7 +147,6 @@ class GachaMenuScene(BaseScene):
     
     def _enter_gacha(self):
         """进入抽卡场景"""
-        # 可以传递选中的卡池信息到gacha场景
         self.switch_to("gacha")
     
     def handle_event(self, event):
@@ -176,11 +175,10 @@ class GachaMenuScene(BaseScene):
                     mouse_pos[1] - self.scroll_view.rect.y + self.scroll_view.scroll_y
                 )
                 # 创建调整后的事件
-                adjusted_event = pygame.event.Event(
-                    event.type,
-                    pos=adjusted_pos,
-                    button=getattr(event, 'button', 1)
-                )
+                event_kwargs = {'pos': adjusted_pos}
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    event_kwargs['button'] = event.button
+                adjusted_event = pygame.event.Event(event.type, **event_kwargs)
                 for btn in self.pool_buttons:
                     btn.handle_event(adjusted_event)
         
