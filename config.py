@@ -118,5 +118,6 @@ def get_font(size):
     if CHINESE_FONT_PATH:
         return pygame.font.Font(CHINESE_FONT_PATH, size)
     else:
+        print("使用默认字体，不支持中文显示")
         return pygame.font.Font(None, size)
     

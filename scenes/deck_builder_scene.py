@@ -300,7 +300,7 @@ class DeckBuilderScene(BaseScene):
         
         # 按稀有度排序
         rarity_order = {"SSS": 0, "SS": 1, "S": 2, "A": 3, "B": 4, "C": 5, "D": 6}
-        collection_data.sort(key=lambda x: (rarity_order.get(x["rarity"], 99), x["first_obtained"]))
+        collection_data.sort(key=lambda x: (rarity_order.get(x["rarity"], 99)))
         
         # 创建卡牌widget
         self.collection_cards = []

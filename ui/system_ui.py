@@ -16,7 +16,7 @@ import os
 import json
 import math
 import pygame
-from config import get_chinese_font, UI_SCALE
+from config import get_font, UI_SCALE
 
 DEFAULT_DATA_DIR = "data"
 DEFAULT_DATA_FILE = os.path.join(DEFAULT_DATA_DIR, "profile.json") # 数据文件路径
@@ -46,7 +46,6 @@ class CurrencyLevelUI:
         self.bg_color = bg_color
         self.base_xp = base_xp
         self.xp_multiplier = xp_multiplier
-        self.font = get_chinese_font()
 
         # 基础状态
         self.golds = 0
@@ -64,9 +63,8 @@ class CurrencyLevelUI:
         self._gold_surf = None
         self._crystal_surf = None
 
-        self.raw_font = get_chinese_font()
-        self.font = self._make_font_from_spec(self.raw_font, int(24 * UI_SCALE))
-        self.font_large = self._make_font_from_spec(self.raw_font, int(30 * UI_SCALE))
+        self.font = get_font(int(24 * UI_SCALE))
+        self.font_large = get_font(int(30 * UI_SCALE))
 
         # 回调变量
         self.on_level_up = None
@@ -278,20 +276,3 @@ class CurrencyLevelUI:
         # 最后将 bg_surf 绘制到提供的表面上
         surface.blit(bg_surf, (x, y))
         return bg_rect
-
-    def _make_font_from_spec(self, spec, size):
-        """兼容 spec 为: pygame.font.Font """
-        if isinstance(spec, pygame.font.Font):
-            return spec
-
-        # string: first尝试当作文件路径
-        if isinstance(spec, str):
-            if os.path.exists(spec):
-                return pygame.font.Font(spec, size)
-            
-            try:
-                return pygame.font.SysFont(spec, size)
-            except Exception:
-                pass
-        # 回退默认字体
-        return pygame.font.Font(None, size)

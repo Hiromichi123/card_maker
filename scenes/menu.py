@@ -7,6 +7,8 @@ from ui.background import ParallaxBackground
 from ui.system_ui import CurrencyLevelUI
 from ui.activity_poster import PosterUI
 
+GAME_TITLE = "Card Battle Master Simulator v0.5.0"
+
 # 海报跳转映射表：index -> scene_name
 poster_to_scene = {
     0: "gacha",
@@ -14,7 +16,7 @@ poster_to_scene = {
 }
 
 # 海报位置
-poster_topleft = (int(WINDOW_WIDTH * 0.6), int(WINDOW_HEIGHT * 0.6))
+poster_topleft = (int(WINDOW_WIDTH * 0.58), int(WINDOW_HEIGHT * 0.6))
 
 class MainMenuScene(BaseScene):
     def __init__(self, screen):
@@ -82,12 +84,12 @@ class MainMenuScene(BaseScene):
         self.background.draw(self.screen) # 背景
         
         # 绘制标题
-        title_text = self.title_font.render("Card Battle Master Simulator v1.0", True, (255, 215, 0))
+        title_text = self.title_font.render(GAME_TITLE, True, (255, 215, 0))
         title_rect = title_text.get_rect(center=(WINDOW_WIDTH // 2, int(WINDOW_HEIGHT * 0.12)))
         
         # 标题阴影
         shadow_offset = max(3, int(3 * UI_SCALE))
-        shadow_text = self.title_font.render("Card Battle Master Simulator v1.0", True, (0, 0, 0))
+        shadow_text = self.title_font.render(GAME_TITLE, True, (0, 0, 0))
         shadow_rect = shadow_text.get_rect(center=(WINDOW_WIDTH // 2 + shadow_offset, 
                                                    int(WINDOW_HEIGHT * 0.12) + shadow_offset))
         self.screen.blit(shadow_text, shadow_rect)
@@ -106,7 +108,7 @@ class MainMenuScene(BaseScene):
             self.base_x, self.start_y,
             self.button_width, self.button_height,
             "进入战斗",
-            color=(200, 50, 50), hover_color=(255, 80, 80),
+            color=(200, 50, 50), hover_color=(255, 80, 80), text_color=(25, 25, 25),
             on_click=lambda: self.switch_to("battle_menu")
         )
         self.buttons.append(battle_btn)
@@ -117,7 +119,7 @@ class MainMenuScene(BaseScene):
             self.start_y + self.button_spacing,
             self.button_width, self.button_height,
             "抽卡",
-            color=(255, 140, 0), hover_color=(255, 180, 50),
+            color=(255, 140, 0), hover_color=(255, 180, 50), text_color=(25, 25, 25),
             on_click=lambda: self.switch_to("gacha")
         )
         self.buttons.append(gacha_btn)
@@ -128,7 +130,7 @@ class MainMenuScene(BaseScene):
             self.start_y + self.button_spacing * 2,
             self.button_width, self.button_height,
             "出战卡组配置",
-            color=(100, 150, 255), hover_color=(150, 200, 255),
+            color=(100, 150, 255), hover_color=(150, 200, 255), text_color=(25, 25, 25),
             on_click=lambda: self.switch_to("deck_builder")
         )
         self.buttons.append(deck_btn)
@@ -139,7 +141,7 @@ class MainMenuScene(BaseScene):
             self.start_y + self.button_spacing * 3,
             self.button_width, self.button_height,
             "卡牌图鉴",
-            color=(100, 200, 150), hover_color=(150, 255, 200),
+            color=(100, 200, 150), hover_color=(150, 255, 200), text_color=(25, 25, 25),
             on_click=lambda: self.switch_to("collection")
         )
         self.buttons.append(collection_btn)
@@ -150,7 +152,7 @@ class MainMenuScene(BaseScene):
             self.start_y + self.button_spacing * 4,
             self.button_width, self.button_height,
             "设置",
-            color=(150, 100, 255), hover_color=(200, 150, 255),
+            color=(150, 100, 255), hover_color=(200, 150, 255), text_color=(25, 25, 25),
             on_click=lambda: self.switch_to("settings")
         )
         self.buttons.append(settings_btn)
@@ -161,7 +163,7 @@ class MainMenuScene(BaseScene):
             self.start_y + self.button_spacing * 5,
             self.button_width, self.button_height,
             "退出游戏",
-            color=(200, 50, 50), hover_color=(255, 70, 70),
+            color=(200, 50, 50), hover_color=(255, 70, 70), text_color=(25, 25, 25),
             on_click=self.quit_game
         )
         self.buttons.append(quit_btn)

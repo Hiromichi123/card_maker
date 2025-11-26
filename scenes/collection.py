@@ -214,9 +214,9 @@ class CollectionScene(BaseScene):
         else:
             cards_data = self.inventory.get_cards_by_rarity(self.selected_rarity)
         
-        # 按稀有度和获取时间排序
+        # 按稀有度排序
         rarity_order = {"SSS": 0, "SS": 1, "S": 2, "A": 3, "B": 4, "C": 5, "D": 6}
-        cards_data.sort(key=lambda x: (rarity_order.get(x["rarity"], 99), x["first_obtained"]))
+        cards_data.sort(key=lambda x: rarity_order.get(x["rarity"], 99))
         self.card_widgets = [] # 创建卡牌widget
         
         for i, card_data in enumerate(cards_data):

@@ -20,8 +20,8 @@ from config import WINDOW_WIDTH, WINDOW_HEIGHT
 
 # 路径
 posters_dir = os.path.join("assets", "poster")
-poster_width = int(WINDOW_WIDTH * 0.32)
-poster_height = int(WINDOW_HEIGHT * 0.28)
+poster_width = int(WINDOW_WIDTH * 0.35)
+poster_height = int(WINDOW_HEIGHT * 0.30)
 
 # 视觉常量
 DEFAULT_BG_COLOR = (30, 30, 30, 200) # 半透明背景

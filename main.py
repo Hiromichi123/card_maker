@@ -52,7 +52,7 @@ class SceneManager:
         self.scenes["main_menu"] = MainMenuScene(self.screen)
         self.scenes["gacha"] = GachaScene(self.screen)
         self.scenes["collection"] = CollectionScene(self.screen)
-        self.scenes["deck_builder"] = DeckBuilderScene(self.screen)
+        #self.scenes["deck_builder"] = DeckBuilderScene(self.screen)
         self.scenes["battle_menu"] = BattleMenuScene(self.screen)
         self.scenes["draft_scene"] = DraftScene(self.screen)
         self.scenes["draft_battle"] = DraftBattleScene(self.screen)

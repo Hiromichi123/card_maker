@@ -1,6 +1,5 @@
 """抽卡场景"""
 import pygame
-from streamlit import event
 from scenes.base_scene import BaseScene
 from ui.button import Button
 from game.card_system import CardSystem
@@ -8,9 +7,9 @@ from utils.inventory import get_inventory
 from config import *
 
 # 卡牌设置
-CARD_WIDTH = 360  #原720
-CARD_HEIGHT = 540 #原1080
-CARD_SPACING = 40
+CARD_WIDTH = int(360 * UI_SCALE)
+CARD_HEIGHT = int(540 * UI_SCALE)
+CARD_SPACING = int(40 * UI_SCALE)
 
 """抽卡场景"""
 class GachaScene(BaseScene):
@@ -29,8 +28,20 @@ class GachaScene(BaseScene):
         button_height = int(90 * UI_SCALE)
         button_spacing = int(30 * UI_SCALE)
         
-        # 抽卡按钮
-        self.draw_button = Button(
+        # 单抽按钮
+        self.draw_one_button = Button(
+            WINDOW_WIDTH // 2 - button_width*2 - button_width // 2,
+            int(WINDOW_HEIGHT * 0.85),
+            button_width,
+            button_height,
+            "500G 抽1张",
+            color=(255, 140, 0),
+            hover_color=(255, 165, 0),
+            on_click=self.draw_one_card
+        )
+
+        # 十连抽按钮
+        self.draw_ten_button = Button(
             WINDOW_WIDTH // 2 - button_width - button_spacing // 2,
             int(WINDOW_HEIGHT * 0.85),
             button_width,
@@ -38,7 +49,7 @@ class GachaScene(BaseScene):
             "4500G 抽10连",
             color=(255, 140, 0),
             hover_color=(255, 165, 0),
-            on_click=self.draw_cards
+            on_click=self.draw_ten_cards
         )
         
         # 返回按钮
@@ -66,14 +77,18 @@ class GachaScene(BaseScene):
         
         return bg
     
-    """抽卡"""
-    def draw_cards(self):
+    """单抽"""
+    def draw_one_card(self):
         if not self.card_system.is_animating:
-            drawn_cards = self.card_system.draw_cards() # 执行抽卡
-            
+            drawn_card = self.card_system.draw_one_card()
+            self.inventory.add_card(drawn_card.image_path, drawn_card.rarity) # 保存到库存
+
+    """十连抽卡"""
+    def draw_ten_cards(self):
+        if not self.card_system.is_animating:
+            drawn_cards = self.card_system.draw_ten_cards()
             # 保存到库存
-            cards_to_save = [(card.image_path, card.rarity) 
-                            for card in self.card_system.cards]
+            cards_to_save = [(card.image_path, card.rarity) for card in drawn_cards]
             self.inventory.add_cards(cards_to_save)
 
     """获取鼠标悬停的卡牌数据"""
@@ -105,7 +120,8 @@ class GachaScene(BaseScene):
                 self.draw_cards()
 
         # 按钮事件
-        self.draw_button.handle_event(event)
+        self.draw_one_button.handle_event(event)
+        self.draw_ten_button.handle_event(event)
         self.back_button.handle_event(event)
     
     """更新"""
@@ -117,18 +133,19 @@ class GachaScene(BaseScene):
         self.screen.blit(self.background, (0, 0)) # 背景
         self.draw_title() # 标题
         self.card_system.draw(self.screen) # 卡牌
-        self.draw_button.draw(self.screen) # 抽卡按钮
+        self.draw_one_button.draw(self.screen) # 单抽按钮
+        self.draw_ten_button.draw(self.screen) # 十连抽按钮
         self.back_button.draw(self.screen) # 返回按钮
         self.draw_probability_info() # 概率信息
     
     def draw_title(self):
         """绘制标题"""
         title_y = int(WINDOW_HEIGHT * 0.04)
-        title_text = self.title_font.render("抽卡模拟器", True, (255, 215, 0))
+        title_text = self.title_font.render("抽卡", True, (255, 215, 0))
         title_rect = title_text.get_rect(center=(WINDOW_WIDTH // 2, title_y))
         
         shadow_offset = max(2, int(2 * UI_SCALE))
-        shadow_text = self.title_font.render("抽卡模拟器", True, (0, 0, 0))
+        shadow_text = self.title_font.render("抽卡", True, (0, 0, 0))
         shadow_rect = shadow_text.get_rect(center=(WINDOW_WIDTH // 2 + shadow_offset, 
                                                    title_y + shadow_offset))
         

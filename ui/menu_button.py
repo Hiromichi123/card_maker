@@ -1,31 +1,16 @@
-"""
-Enhanced menu button with triangle indicators and hover effects
-"""
+"""Enhanced menu button with triangle indicators and hover effects"""
 import pygame
 import math
 from config import UI_SCALE, get_font
 
-
 class MenuButton:
-    """Enhanced menu button with modern design"""
-    
     def __init__(self, x, y, width, height, text,
                  color=(100, 150, 255),
                  hover_color=(130, 180, 255),
                  text_color=(255, 255, 255),
-                 font_size=36,
+                 font_size=40,
                  on_click=None):
-        """
-        Args:
-            x, y: Button position
-            width, height: Button size
-            text: Button text
-            color: Default color
-            hover_color: Hover color
-            text_color: Text color
-            font_size: Font size
-            on_click: Click callback function
-        """
+
         self.rect = pygame.Rect(x, y, width, height)
         self.text = text
         self.color = color

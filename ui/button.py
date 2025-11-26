@@ -4,26 +4,15 @@
 import pygame
 from config import UI_SCALE, get_font
 
+"""按钮类"""
 class Button:
-    """按钮类"""
-    
     def __init__(self, x, y, width, height, text, 
                  color=(100, 150, 255),
                  hover_color=(130, 180, 255),
                  text_color=(255, 255, 255),
-                 font_size=36,
+                 font_size=40,
                  on_click=None):
-        """
-        Args:
-            x, y: 按钮位置
-            width, height: 按钮尺寸
-            text: 按钮文字
-            color: 默认颜色
-            hover_color: 悬停颜色
-            text_color: 文字颜色
-            font_size: 字体大小
-            on_click: 点击回调函数
-        """
+
         self.rect = pygame.Rect(x, y, width, height)
         self.text = text
         self.color = color

@@ -1,3 +1,4 @@
+"""卡牌系统"""
 import os
 import random
 import pygame
@@ -123,9 +124,7 @@ class Card:
     
     def _wrap_name(self, name, font, max_width):
         """名称换行"""
-        # 移除空格
-        name_no_space = name.replace(' ', '')
-        
+        name_no_space = name.replace(' ', '') # 移除空格
         # 如果名称较短，直接返回
         test = font.render(name_no_space, True, (255, 255, 255))
         if test.get_width() <= max_width:
@@ -147,9 +146,8 @@ class Card:
                          CARD_WIDTH - border_margin * 2, 
                          CARD_HEIGHT - border_margin * 2), border_width)
         
-        font_size = max(18, int(36 * UI_SCALE))
-        font = get_font(font_size)
-        text = font.render("?", True, (200, 200, 200))
+        font = get_font(int(45 * UI_SCALE))
+        text = font.render("？？？", True, (200, 200, 200))
         text_rect = text.get_rect(center=(CARD_WIDTH // 2, CARD_HEIGHT // 2))
         surface.blit(text, text_rect)
         
@@ -247,11 +245,7 @@ class Card:
                     self.current_position[1] - glow_margin))
     
     def update_hover(self, mouse_pos):
-        """
-        更新悬停状态
-        Args:
-            mouse_pos: 鼠标位置
-        """
+        """更新悬停状态"""
         # 只有翻转完成后才检测悬停
         if self.flip_progress >= 1.0:
             # 检查鼠标是否在卡牌矩形内
@@ -284,8 +278,21 @@ class CardSystem:
         self.animation_start_time = 0
         self.is_animating = False
         
-    def draw_cards(self):
-        """抽取卡牌"""
+    def draw_one_card(self):
+        """单抽"""
+        card_pool = self.get_card_pool()
+        level_dir, card_path = self.draw_single_card(card_pool)
+        position = ((WINDOW_WIDTH - CARD_WIDTH) // 2, 
+                    (WINDOW_HEIGHT - CARD_HEIGHT) // 2)
+        card = Card(card_path, level_dir, position, 0)
+        self.cards = [card]
+        self.animation_start_time = 0
+        self.is_animating = True
+        return card
+
+    
+    def draw_ten_cards(self):
+        """十连抽"""
         self.cards = []
         drawn_cards = []
         
@@ -308,7 +315,6 @@ class CardSystem:
         self.cards = drawn_cards
         self.animation_start_time = 0
         self.is_animating = True
-        
         return drawn_cards
     
     def get_card_pool(self):
@@ -316,7 +322,7 @@ class CardSystem:
         pool = {level_dir: [] for level_dir in CARD_PROBABILITIES.keys()}
         
         for level_dir in pool.keys():
-            level_path = os.path.join(CARD_BASE_PATH, level_dir)
+            level_path = os.path.join("assets/outputs", level_dir) # 不能使用配置中的绝对路径
             if os.path.exists(level_path):
                 files = [f for f in os.listdir(level_path) 
                         if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
@@ -340,9 +346,6 @@ class CardSystem:
                     card_path = random.choice(card_pool[level_dir])
                     return level_dir, card_path
         
-        # 默认返回最低等级
-        return "level6", random.choice(card_pool["level6"])
-    
     def update(self, dt):
         """更新卡牌动画"""
         if self.is_animating:

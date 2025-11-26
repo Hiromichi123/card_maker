@@ -5,12 +5,11 @@ import glob
 import json
 from PIL import Image, ImageDraw, ImageFont
 
-lv = "C"
-cards_path = "C:\\Users\\22716\\Desktop\\cards\\" + lv
-frame_path = "C:\\Users\\22716\\Desktop\\cards\\frame.png"
-#frame_path = "C:\\Users\\22716\\Desktop\\cards\\frame.webp"
-json_path = "C:\\Users\\22716\\Desktop\\cards\\" + lv + "\\cards.json"
-output_path = "C:\\Users\\22716\\Desktop\\outputs\\" + lv
+dir = "#elna"
+cards_path = "D:\\Github\\card_maker\\assets\\cards\\" + dir
+frame_path = "D:\\Github\\card_maker\\assets\\cards\\frame.png"
+json_path = "D:\\Github\\card_maker\\assets\\cards\\" + dir + "\\cards.json"
+output_path = "D:\\Github\\card_maker\\assets\\outputs\\" + dir
 x_offset = 20  # 名称水平偏移量
 y_offset = 50 # 名称向下垂直偏移量
 FONT_SIZE = 50  # 字体大小
@@ -52,7 +51,6 @@ def find_card_image(card_id, cards_dir='cards'):
 
 def find_system_font():
     candidates = [
-        # 优先尝试宋体（SimSun）用于中文正体
         r"C:/Windows/Fonts/simsun.ttc",
         r"C:/Windows/Fonts/simsun.ttf",
         r"C:/Windows/Fonts/msyh.ttc",
@@ -180,6 +178,8 @@ def overlay_card(content_path, frame_path, output_path,
         italic=True,
     )
 
+    if not os.path.exists(os.path.dirname(output_path)):
+        os.makedirs(os.path.dirname(output_path))
     cv2.imwrite(output_path, output_uint8)
     print("✔ 成功生成:", output_path)
 

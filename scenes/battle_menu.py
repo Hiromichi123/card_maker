@@ -5,6 +5,16 @@ from scenes.base_scene import BaseScene
 from ui.menu_button import MenuButton
 from ui.background import ParallaxBackground
 from ui.system_ui import CurrencyLevelUI
+from ui.activity_poster import PosterUI
+
+# 海报跳转映射表：index -> scene_name
+poster_to_scene = {
+    0: "gacha",
+    1: "battle_menu"
+}
+
+# 海报位置
+poster_topleft = (int(WINDOW_WIDTH * 0.58), int(WINDOW_HEIGHT * 0.6))
 
 class BattleMenuScene(BaseScene):
     def __init__(self, screen):
@@ -31,6 +41,10 @@ class BattleMenuScene(BaseScene):
         self.currency_ui = CurrencyLevelUI()
         self.currency_ui.load_state()
 
+        # 活动海报轮播控件
+        self.poster_ui = PosterUI()
+        self.poster_ui.on_click = self._on_poster_click
+
         self.buttons = []
         self.create_buttons() # 创建按钮列表
         self.quit_flag = False  # 退出标志
@@ -47,6 +61,9 @@ class BattleMenuScene(BaseScene):
         # 更新视差背景
         if event.type == pygame.MOUSEMOTION:
             self.background.update_mouse_position(event.pos)
+
+        # 活动海报事件
+        self.poster_ui.handle_event(event)
         
         # 按钮事件
         for button in self.buttons:
@@ -54,6 +71,7 @@ class BattleMenuScene(BaseScene):
     
     def update(self, dt):
         self.background.update(dt) # 背景
+        self.poster_ui.update(dt) # 活动海报轮播控件
         
         # 更新按钮动画
         for button in self.buttons:
@@ -75,6 +93,7 @@ class BattleMenuScene(BaseScene):
         self.screen.blit(title_text, title_rect)
 
         self.currency_ui.draw(self.screen) # 货币和等级 UI
+        self.poster_ui.draw(self.screen, poster_topleft) #绘制活动海报
         
         # 绘制按钮
         for button in self.buttons:
@@ -135,3 +154,8 @@ class BattleMenuScene(BaseScene):
         )
         self.buttons.append(back_btn)
         
+    def _on_poster_click(self, idx):
+        if idx is None or idx < 0:
+            return
+        scene_name = poster_to_scene.get(idx) # 获取对应场景名称
+        self.switch_to(scene_name) # 切换场景

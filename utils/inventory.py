@@ -1,40 +1,27 @@
-"""
-库存管理系统
-负责卡牌的保存、读取、统计
-"""
+"""库存管理系统 负责卡牌的保存、读取、统计"""
 import json
 import os
-from datetime import datetime
 from collections import defaultdict
 
+SAVE_FILE = "data/inventory.json"
+
+"""库存管理类"""
 class Inventory:
-    """库存管理类"""
-    
-    SAVE_FILE = "data/inventory.json"
-    
     def __init__(self):
         self.cards = []  # 所有收集到的卡牌列表
         self.card_count = defaultdict(int)  # 卡牌数量统计 {card_path: count}
         self.total_draws = 0  # 总抽卡次数
         self.rarity_stats = defaultdict(int)  # 稀有度统计
         
-        # 确保数据目录存在
-        os.makedirs(os.path.dirname(self.SAVE_FILE), exist_ok=True)
+        os.makedirs(os.path.dirname(SAVE_FILE), exist_ok=True) # 确保数据目录存在
         
-        # 加载数据
-        self.load()
+        self.load() # 加载数据
     
     def add_card(self, card_path, rarity):
-        """
-        添加卡牌到库存
-        Args:
-            card_path: 卡牌路径
-            rarity: 稀有度
-        """
+        """添加卡牌到库存"""
         card_data = {
             "path": card_path,
             "rarity": rarity,
-            "obtained_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
         
         self.cards.append(card_data)
@@ -43,11 +30,7 @@ class Inventory:
         self.total_draws += 1
         
     def add_cards(self, cards_list):
-        """
-        批量添加卡牌
-        Args:
-            cards_list: [(card_path, rarity), ...]
-        """
+        """批量添加卡牌"""
         for card_path, rarity in cards_list:
             self.add_card(card_path, rarity)
         
@@ -63,8 +46,7 @@ class Inventory:
                 unique_cards[path] = {
                     "path": path,
                     "rarity": card["rarity"],
-                    "count": self.card_count[path],
-                    "first_obtained": card["obtained_time"]
+                    "count": self.card_count[path]
                 }
         return list(unique_cards.values())
     
@@ -93,7 +75,7 @@ class Inventory:
         }
         
         try:
-            with open(self.SAVE_FILE, 'w', encoding='utf-8') as f:
+            with open(SAVE_FILE, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
             print(f"库存已保存: {len(self.cards)} 张卡牌")
         except Exception as e:
@@ -101,12 +83,12 @@ class Inventory:
     
     def load(self):
         """从本地文件加载"""
-        if not os.path.exists(self.SAVE_FILE):
+        if not os.path.exists(SAVE_FILE):
             print("未找到存档，创建新库存")
             return
         
         try:
-            with open(self.SAVE_FILE, 'r', encoding='utf-8') as f:
+            with open(SAVE_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
             self.cards = data.get("cards", [])

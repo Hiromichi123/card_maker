@@ -107,13 +107,11 @@ class CardDatabase:
         try:
             with open(cards_json_path, 'r', encoding='utf-8') as f:
                 cards_data = json.load(f)
-            
             count = 0
             for card_dict in cards_data:
                 card = CardData.from_dict(card_dict, rarity)
                 self.add_card(card)
                 count += 1
-            
             print(f"从 {rarity}/ 加载了 {count} 张卡牌")
             return count
             
@@ -143,6 +141,7 @@ class CardDatabase:
         if card_id:
             card = self.cards.get(card_id)
             return card
+        print(f"未找到路径对应的卡牌: {image_path}")
         return None
     
     def get_cards_by_rarity(self, rarity):
