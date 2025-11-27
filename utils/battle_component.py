@@ -2,6 +2,7 @@
 import pygame
 from config import *
 from game.card_animation import ShakeAnimation
+from utils.image_cache import get_scaled_image
 
 STATE_FONT_SIZE = int(60 * UI_SCALE)
 STATE_X_OFFSET = int(20 * UI_SCALE)
@@ -52,16 +53,13 @@ class CardSlot:
             self.card_image = None
             return
         
-        import os
-        try:
-            if os.path.exists(self.card_data.image_path):
-                original = pygame.image.load(self.card_data.image_path)
-                self.card_image = pygame.transform.smoothscale(
-                    original, (self.rect.width, self.rect.height)
-                )
-            else:
-                self.card_image = self.create_placeholder_image()
-        except:
+        cached = get_scaled_image(
+            getattr(self.card_data, 'image_path', None),
+            (self.rect.width, self.rect.height)
+        )
+        if cached:
+            self.card_image = cached
+        else:
             self.card_image = self.create_placeholder_image()
 
     def create_placeholder_image(self):
@@ -101,6 +99,13 @@ class CardSlot:
         if self.slot_type == "waiting" and self.has_card():
             self.cd_remaining = max(0, self.cd_remaining - amount)
             return self.cd_remaining == 0
+        return False
+
+    def increase_cd(self, amount=1):
+        """增加CD（延迟上场）"""
+        if self.slot_type == "waiting" and self.has_card() and amount > 0:
+            self.cd_remaining = max(0, self.cd_remaining + amount)
+            return True
         return False
 
     def draw(self, screen):

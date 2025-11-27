@@ -7,9 +7,28 @@ from game.skills.skill_effects import (
     create_aoe_fireball_skill, # 群体火球n
     create_aoe_ice_skill, # 群体冰封n
     create_aoe_lightning_skill, # 群体闪电n
+    create_draw_skill, # 抽卡n
+    create_revive_skill, # 还魂n
+    create_accelerate_skill, # 加速n
+    create_delay_skill, # 延迟n
+    create_self_destruct_skill, # 自毁
+    create_silence_skill, # 沉默
+    create_immunity_skill, # 免疫
+    create_undying_skill, # 不死
+    create_rebirth_skill, # 复活
+    create_blessing_skill, # 祝福n
+    create_group_blessing_skill, # 群体祝福n
+    create_inspire_skill, # 振奋n
+    create_group_inspire_skill, # 群体振奋n
+    create_curse_skill, # 诅咒n
+        create_break_armor_skill, # 破甲n
     create_defense_skill, # 防御n
     create_heal_ally_skill, # 治愈n
     create_self_heal_skill, # 恢复n
+    create_vampire_skill, # 吸血n
+    create_injury_skill, # 受伤n
+    create_counter_skill, # 反击n
+    create_dodge_skill, # 闪避n
 )
 
 class SkillRegistry:
@@ -85,7 +104,87 @@ class SkillRegistry:
         if match:
             damage = int(match.group(1))
             return create_aoe_lightning_skill(damage)
+
+        # 抽卡n
+        match = re.match(r"抽卡(\d+)", trait)
+        if match:
+            amount = int(match.group(1))
+            return create_draw_skill(amount)
+
+        # 还魂n
+        match = re.match(r"还魂(\d+)", trait)
+        if match:
+            amount = int(match.group(1))
+            return create_revive_skill(amount)
+
+        # 加速n
+        match = re.match(r"加速(\d+)", trait)
+        if match:
+            amount = int(match.group(1))
+            return create_accelerate_skill(amount)
+
+        # 延迟n
+        match = re.match(r"延迟(\d+)", trait)
+        if match:
+            amount = int(match.group(1))
+            return create_delay_skill(amount)
+
+        # 自毁
+        if trait == "自毁":
+            return create_self_destruct_skill()
+
+        # 沉默
+        if trait == "沉默":
+            return create_silence_skill()
+
+        # 免疫
+        if trait == "免疫":
+            return create_immunity_skill()
+
+        # 不死
+        if trait == "不死":
+            return create_undying_skill()
+
+        # 复活
+        if trait == "复活":
+            return create_rebirth_skill()
         
+        # 祝福n
+        match = re.match(r"祝福(\d+)", trait)
+        if match:
+            amount = int(match.group(1))
+            return create_blessing_skill(amount)
+
+        # 群体祝福n
+        match = re.match(r"群体祝福(\d+)", trait)
+        if match:
+            amount = int(match.group(1))
+            return create_group_blessing_skill(amount)
+
+        # 振奋n
+        match = re.match(r"振奋(\d+)", trait)
+        if match:
+            amount = int(match.group(1))
+            return create_inspire_skill(amount)
+
+        # 群体振奋n
+        match = re.match(r"群体振奋(\d+)", trait)
+        if match:
+            amount = int(match.group(1))
+            return create_group_inspire_skill(amount)
+
+        # 诅咒n
+        match = re.match(r"诅咒(\d+)", trait)
+        if match:
+            amount = int(match.group(1))
+            return create_curse_skill(amount)
+
+        # 破甲n
+        match = re.match(r"破甲(\d+)", trait)
+        if match:
+            amount = int(match.group(1))
+            return create_break_armor_skill(amount)
+
         # 防御n
         match = re.match(r"防御(\d+)", trait)
         if match:
@@ -103,6 +202,30 @@ class SkillRegistry:
         if match:
             heal_amount = int(match.group(1))
             return create_self_heal_skill(heal_amount)
+        
+        # 吸血n
+        match = re.match(r"吸血(\d+)", trait)
+        if match:
+            heal_amount = int(match.group(1))
+            return create_vampire_skill(heal_amount)
+        
+        # 受伤n
+        match = re.match(r"受伤(\d+)", trait)
+        if match:
+            dmg = int(match.group(1))
+            return create_injury_skill(dmg)
+        
+        # 反击n
+        match = re.match(r"反击(\d+)", trait)
+        if match:
+            dmg = int(match.group(1))
+            return create_counter_skill(dmg)
+        
+        # 闪避n
+        match = re.match(r"闪避(\d+)", trait)
+        if match:
+            lvl = int(match.group(1))
+            return create_dodge_skill(lvl)
         
         return None
     

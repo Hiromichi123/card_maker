@@ -8,6 +8,7 @@ class SkillTrigger(Enum):
     BEFORE_ATTACK = "before_attack"   # 攻击前触发
     AFTER_ATTACK = "after_attack"     # 攻击后触发
     ON_DAMAGED = "on_damaged"         # 受到伤害时
+    AFTER_DAMAGED = "after_damaged"   # 受到普通攻击伤害后
     ON_DEPLOY = "on_deploy"           # 部署时：进入战斗槽位
     ON_DEATH = "on_death"             # 死亡时：进入弃牌堆
     TURN_START = "turn_start"         # 回合开始时
@@ -91,8 +92,43 @@ class BattleContext:
         self.defender_owner = None     # 防御者所属
         self.damage = 0                # 即将造成的伤害
         self.original_damage = 0       # 原始伤害（用于计算修正）
+        self.armor_break_amount = 0    # 当前攻击可无视的防御值
+        self.pending_armor_break_target = None  # 需要显示破甲特效的槽位
         self.skill_target = None       # 技能目标（缓存随机选择的目标）
         self.skill_targets = None      # 技能目标列表（群体技能用）
+        self.damage_amount = 0         # 当前普通攻击的可变伤害
+        self.last_damage_taken = 0     # 最近一次受到的实际伤害
+        self.last_attacker_slot = None
+        self.last_attacker_owner = None
+        self.last_dodge_success = False
+        self.last_attack_damage = 0    # 上一次普通攻击造成的实际伤害
+        self.last_attack_target_slot = None
+        self.last_attack_target_owner = None
+        self.last_attack_hit_player = False
+        self.last_attack_target_pos = None
+        self.current_attack_animation = None  # 当前普通攻击的动画引用
+        self.reset_attack_result()
+
+    def reset_attack_result(self):
+        """重置普通攻击记录，供AFTER_ATTACK技能使用"""
+        self.last_attack_damage = 0
+        self.last_attack_target_slot = None
+        self.last_attack_target_owner = None
+        self.last_attack_hit_player = False
+        self.last_attack_target_pos = None
+        self.last_damage_taken = 0
+        self.last_attacker_slot = None
+        self.last_attacker_owner = None
+        self.last_dodge_success = False
+        self.current_attack_animation = None
+
+    def set_attack_result(self, damage, target_slot=None, target_owner=None, target_pos=None, hit_player=False):
+        """记录普通攻击的结果，便于后续效果（如吸血）查询"""
+        self.last_attack_damage = max(0, damage)
+        self.last_attack_target_slot = target_slot
+        self.last_attack_target_owner = target_owner
+        self.last_attack_target_pos = target_pos
+        self.last_attack_hit_player = hit_player
         
     def set_attacker(self, slot, owner):
         """设置攻击者"""
@@ -130,6 +166,17 @@ class BattleContext:
         """对槽位造成伤害"""
         if target_slot and target_slot.has_card():
             card = target_slot.card_data
+            traits = getattr(card, 'traits', []) or []
+            if "免疫" in traits:
+                try:
+                    from game.skills.skill_animations import ShieldAnimation
+                    shield_anim = ShieldAnimation(target_slot)
+                    shield_anim.start()
+                    if hasattr(self.scene, 'battle_animations'):
+                        self.scene.battle_animations.append(shield_anim)
+                except Exception:
+                    pass
+                return False
             old_hp = card.hp
             card.hp = max(0, card.hp - damage)
             target_slot.card_data = card

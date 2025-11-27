@@ -47,17 +47,17 @@ class SceneManager:
     """注册所有场景"""
     def register_scenes(self):
         self.scenes["main_menu"] = MainMenuScene(self.screen)
-        #self.scenes["gacha_menu"] = GachaMenuScene(self.screen)
-        #self.scenes["gacha"] = GachaScene(self.screen)
-        #self.scenes["collection"] = CollectionScene(self.screen)
-        #self.scenes["deck_builder"] = DeckBuilderScene(self.screen)
+        self.scenes["gacha_menu"] = GachaMenuScene(self.screen)
+        self.scenes["gacha"] = GachaScene(self.screen)
+        self.scenes["collection"] = CollectionScene(self.screen)
+        self.scenes["deck_builder"] = DeckBuilderScene(self.screen)
         self.scenes["battle_menu"] = BattleMenuScene(self.screen)
-        #self.scenes["draft_scene"] = DraftScene(self.screen)
-        #self.scenes["draft_battle"] = DraftBattleScene(self.screen)
+        self.scenes["draft_scene"] = DraftScene(self.screen)
+        self.scenes["draft_battle"] = DraftBattleScene(self.screen)
         self.scenes["simple_battle"] = SimpleBattleScene(self.screen)
         
     def switch_scene(self, scene_name):
-        """切换场景（带转场效果）"""
+        """切换场景"""
         if scene_name not in self.scenes:
             print(f"警告: 场景 '{scene_name}' 不存在")
             return

@@ -13,6 +13,11 @@ from game.skills.skill_animations import (
     MultiIceBloomAnimation,
     MultiLightningAnimation,
     HealAnimation,
+    SelfHealAnimation,
+    BleedAnimation,
+    CounterAttackAnimation,
+    DodgeShakeAnimation,
+    LifeStealAnimation,
 )
 
 __all__ = [
@@ -33,4 +38,9 @@ __all__ = [
     'ExplosionAnimation',
     'LightningAnimation',
     'HealAnimation',
+    'SelfHealAnimation',
+    'BleedAnimation',
+    'CounterAttackAnimation',
+    'DodgeShakeAnimation',
+    'LifeStealAnimation',
 ]

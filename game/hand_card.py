@@ -4,6 +4,7 @@
 import pygame
 import math
 from config import *
+from utils.image_cache import get_scaled_image
 
 # 手牌尺寸
 CARD_WIDTH = int(216 * UI_SCALE)
@@ -57,19 +58,14 @@ class HandCard:
 
     """加载卡牌图片""" 
     def load_image(self):
-        import os
-        try:
-            if os.path.exists(self.card_data.image_path):
-                original = pygame.image.load(self.card_data.image_path)
-                self.original_image = pygame.transform.smoothscale(
-                    original, (CARD_WIDTH, CARD_HEIGHT)
-                )
-            else:
-                self.original_image = self.create_placeholder()
-        except:
+        cached = get_scaled_image(
+            getattr(self.card_data, 'image_path', None),
+            (CARD_WIDTH, CARD_HEIGHT)
+        )
+        if cached:
+            self.original_image = cached
+        else:
             self.original_image = self.create_placeholder()
-            
-        self.original_image = self.original_image.convert_alpha()
         self.image = self.original_image.copy()
         
     def create_placeholder(self):

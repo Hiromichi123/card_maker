@@ -36,9 +36,11 @@ class CardAnimation:
 class AttackAnimation(CardAnimation):
     """攻击动画：上抬 → 加速下砸 → 归位"""
     
-    def __init__(self, attacker_slot, target_slot=None, duration=0.7):
+    def __init__(self, attacker_slot, target_slot=None, duration=0.7, on_complete=None):
         super().__init__(attacker_slot, duration)
         self.target_slot = target_slot
+        self.on_complete = on_complete
+        self._completed = False
         
         # 动画阶段时长
         self.pullback_duration = duration * 0.2   # 上抬：0.14秒
@@ -95,11 +97,18 @@ class AttackAnimation(CardAnimation):
             self.offset_x = 0
             
             if self.phase_timer >= self.return_duration:
-                self.finished = True
-                self.offset_x = 0
-                self.offset_y = 0
+                if not self.finished:
+                    self.finished = True
+                    self.offset_x = 0
+                    self.offset_y = 0
+                    self.on_finish()
         
         return self.finished
+    
+    def on_finish(self):
+        if not self._completed and callable(self.on_complete):
+            self._completed = True
+            self.on_complete()
     
     def draw(self, screen):
         """绘制攻击动画"""

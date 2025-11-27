@@ -23,7 +23,7 @@ class SimpleBattleScene(BattleBaseScene):
 
         # 敌人AI设置（SimpleBattle自带AI，一定开启）
         self.auto_timer = 0.0
-        self.auto_delay = 1.5  # AI 思考时间
+        self.auto_delay = 1.0  # AI 思考时间
 
     """====================核心功能===================="""
     def enter(self):

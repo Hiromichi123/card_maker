@@ -6,7 +6,8 @@ from config import *
 from scenes.base_scene import BaseScene
 from ui.button import Button
 from utils.battle_component import CardSlot, HealthBar # 战斗场景组件
-from game.hand_card import HandManager, HandCard # 手牌管理器，手牌类
+from utils.image_cache import get_scaled_image
+from game.hand_card import HandManager, HandCard, CARD_WIDTH, CARD_HEIGHT # 手牌管理器，手牌类
 from game.deck_renderer import DeckRenderer #　卡堆渲染器
 from game.card_animation import SlideAnimation # 滑动动画
 from game.card_animation import AttackAnimation # 攻击动画
@@ -106,6 +107,8 @@ class BattleBaseScene(BaseScene):
         # 双方牌堆
         self.player_deck = []
         self.enemy_deck = []
+        self.player_discard_pile = []
+        self.enemy_discard_pile = []
 
         # 抽卡动画队列
         self.draw_queue = []
@@ -761,12 +764,138 @@ class BattleBaseScene(BaseScene):
                 return True
         return False
 
+    def draw_cards_from_deck(self, who, amount, animate=False):
+        """尝试从牌堆连续抽取多张卡"""
+        drawn = 0
+        for _ in range(amount):
+            if self.draw_card(who, animate=animate):
+                drawn += 1
+            else:
+                break
+        return drawn
+
+    def _reset_card_state(self, card_data):
+        if not card_data:
+            return
+        max_hp = getattr(card_data, 'max_hp', card_data.hp)
+        card_data.hp = max_hp
+
+    def add_card_to_discard(self, owner, card_data):
+        """将卡牌加入对应弃牌堆并更新显示"""
+        if not card_data:
+            return
+        self._reset_card_state(card_data)
+        pile = self.player_discard_pile if owner == 'player' else self.enemy_discard_pile
+        pile.append(card_data)
+        self._update_discard_preview(owner)
+
+    def draw_from_discard(self, owner, amount, animate=False):
+        """从弃牌堆取回卡牌并放回牌堆顶部"""
+        pile = self.player_discard_pile if owner == 'player' else self.enemy_discard_pile
+        deck = self.player_deck if owner == 'player' else self.enemy_deck
+        renderer = self.player_deck_renderer if owner == 'player' else self.enemy_deck_renderer
+        slot = self.player_discard_slot if owner == 'player' else self.enemy_discard_slot
+        drawn_cards = []
+        while len(drawn_cards) < amount and pile:
+            card_data = pile.pop()
+            self._reset_card_state(card_data)
+            drawn_cards.append(card_data)
+        for card_data in drawn_cards:
+            if animate and slot and renderer and self.screen:
+                start_rect = slot.rect.copy()
+                end_rect = self.get_deck_rect(owner)
+                if end_rect:
+                    self.play_blocking_move_animation(card_data, start_rect, end_rect, duration=0.35)
+            deck.insert(0, card_data)
+        if renderer:
+            renderer.set_count(len(deck))
+        self._update_discard_preview(owner)
+        return len(drawn_cards)
+
+    def _update_discard_preview(self, owner):
+        """更新弃牌堆槽位展示顶牌"""
+        pile = self.player_discard_pile if owner == 'player' else self.enemy_discard_pile
+        slot = self.player_discard_slot if owner == 'player' else self.enemy_discard_slot
+        if not slot:
+            return
+        if pile:
+            slot.set_card(pile[-1])
+        else:
+            slot.remove_card()
+
+    def get_hand_entry_position(self, owner):
+        """获取手牌入场动画的目标位置"""
+        hand = self.player_hand if owner == 'player' else self.enemy_hand
+        if hasattr(hand, 'deck_position') and hand.deck_position:
+            return hand.deck_position
+        return (hand.center_x, hand.center_y)
+
+    def get_discard_center(self, owner):
+        """获取弃牌堆的中心点"""
+        slot = self.player_discard_slot if owner == 'player' else self.enemy_discard_slot
+        if slot and hasattr(slot, 'rect'):
+            return slot.rect.center
+        return None
+
+    def get_deck_rect(self, owner):
+        """获取牌堆矩形（用于动画终点）"""
+        renderer = self.player_deck_renderer if owner == 'player' else self.enemy_deck_renderer
+        if not renderer:
+            return None
+        rect = pygame.Rect(0, 0, renderer.card_width, renderer.card_height)
+        rect.topleft = renderer.position
+        return rect
+
+    def _get_slot_owner(self, slot):
+        """返回槽位归属"""
+        if slot in self.player_battle_slots:
+            return 'player'
+        if slot in self.enemy_battle_slots:
+            return 'enemy'
+        return None
+
+    def get_opposite_slot(self, slot):
+        """获取战斗区中对面的槽位"""
+        owner = self._get_slot_owner(slot)
+        if owner is None:
+            return None
+        own_slots = self.player_battle_slots if owner == 'player' else self.enemy_battle_slots
+        opp_slots = self.enemy_battle_slots if owner == 'player' else self.player_battle_slots
+        try:
+            idx = own_slots.index(slot)
+        except ValueError:
+            return None
+        if 0 <= idx < len(opp_slots):
+            return opp_slots[idx]
+        return None
+
+    def is_slot_silenced(self, slot):
+        """判断槽位是否被正对面的沉默技能禁用"""
+        if not slot or not slot.has_card():
+            return False
+        opposite = self.get_opposite_slot(slot)
+        if not opposite or not opposite.has_card():
+            return False
+        traits = getattr(opposite.card_data, 'traits', []) or []
+        return "沉默" in traits
+
+    def get_first_waiting_slot(self, owner):
+        """获取最左侧有卡牌的准备槽位"""
+        slots = self.player_waiting_slots if owner == 'player' else self.enemy_waiting_slots
+        for slot in slots:
+            if slot and slot.has_card():
+                return slot
+        return None
+
     def execute_attack(self, attacker_slot, defender_slot, defender_hp_ref):
         """执行单次攻击（集成技能系统）"""
         attacker_card = attacker_slot.card_data
         
         # 创建战斗上下文
         context = BattleContext(self)
+        context.reset_attack_result()
+        context.armor_break_amount = 0
+        context.pending_armor_break_target = None
         
         # 设置攻击者和防御者
         attacker_owner = "player" if attacker_slot in self.player_battle_slots else "enemy"
@@ -777,75 +906,170 @@ class BattleBaseScene(BaseScene):
             context.set_defender(defender_slot, defender_owner)
         else:
             context.defender_slot = None
+            context.defender_owner = defender_hp_ref
         
         # 获取攻击者的技能
         skill_registry = get_skill_registry()
-        skills = skill_registry.get_skills_from_traits(attacker_card.traits)
+        if self.is_slot_silenced(attacker_slot):
+            skills = []
+        else:
+            skills = skill_registry.get_skills_from_traits(attacker_card.traits)
         
         # 定义普通攻击执行函数（在技能动画完成后调用）
         def execute_normal_attack():
-            # 普通攻击动画
-            attack_anim = AttackAnimation(attacker_slot, context.defender_slot if context.defender_slot and context.defender_slot.has_card() else None)
+            if attacker_slot is None or not attacker_slot.has_card():
+                return
+            context.reset_attack_result()
+            def resolve_damage():
+                if attacker_slot is None or not attacker_slot.has_card():
+                    context.armor_break_amount = 0
+                    context.pending_armor_break_target = None
+                    context.current_attack_animation = None
+                    return
+                try:
+                    # 普通攻击伤害
+                    if context.defender_slot and context.defender_slot.has_card():
+                        # 攻击卡牌
+                        defender_card = context.defender_slot.card_data
+                        attacker_traits = getattr(attacker_card, "traits", []) or []
+                        defender_traits = getattr(defender_card, "traits", []) or []
+                        attacker_is_flying = "飞行" in attacker_traits
+                        defender_is_flying = "飞行" in defender_traits
+
+                        if defender_is_flying and not attacker_is_flying:
+                            # 地面单位无法对空：伤害转移到防御者玩家
+                            target_owner = context.defender_owner
+                            if not target_owner:
+                                target_owner = "player" if context.defender_slot in self.player_battle_slots else "enemy"
+                            damage = attacker_card.atk
+                            target_pos = None
+                            if target_owner == "player":
+                                self.player_current_hp -= damage
+                                self.player_health_bar.set_hp(self.player_current_hp)
+                                target_pos = self.player_health_bar.rect.center
+                            else:
+                                self.enemy_current_hp -= damage
+                                self.enemy_health_bar.set_hp(self.enemy_current_hp)
+                                target_pos = self.enemy_health_bar.rect.center
+                            context.set_attack_result(
+                                damage,
+                                target_slot=None,
+                                target_owner=target_owner,
+                                target_pos=target_pos,
+                                hit_player=True
+                            )
+                        else:
+                            # 计算基础伤害
+                            base_damage = attacker_card.atk
+                            
+                            # 检查防御者是否有防御技能（ON_DAMAGED触发）
+                            if self.is_slot_silenced(context.defender_slot):
+                                defender_skills = []
+                            else:
+                                defender_skills = skill_registry.get_skills_from_traits(defender_card.traits)
+                            context.damage_amount = base_damage  # 将伤害存入context
+                            
+                            # 设置防御者上下文
+                            defender_owner = "player" if context.defender_slot in self.player_battle_slots else "enemy"
+                            original_attacker = context.attacker_slot
+                            original_attacker_owner = context.attacker_owner
+                            context.set_attacker(context.defender_slot, defender_owner)  # 临时切换为防御者视角
+                            
+                            # 触发防御技能
+                            shield_animations = []
+                            for skill in defender_skills:
+                                on_damaged_effects = skill.get_effects_by_trigger(SkillTrigger.ON_DAMAGED)
+                                for effect in on_damaged_effects:
+                                    if effect.can_trigger(context):
+                                        # 执行防御效果（修改context.damage_amount）
+                                        effect.execute(context)
+                                        # 获取盾牌动画
+                                        shield_anim = effect.get_animation(context)
+                                        if shield_anim:
+                                            shield_anim.start()
+                                            shield_animations.append(shield_anim)
+                                            self.battle_animations.append(shield_anim)
+                            
+                            # 恢复攻击者上下文
+                            context.set_attacker(original_attacker, original_attacker_owner)
+                            
+                            # 应用减伤后的伤害
+                            final_damage = max(0, context.damage_amount)
+                            old_hp = defender_card.hp
+                            new_hp = max(0, old_hp - final_damage)
+                            defender_card.hp = new_hp
+                            
+                            context.defender_slot.card_data = defender_card
+                            context.defender_slot.start_hp_flash(old_hp, new_hp)
+                            actual_damage = max(0, old_hp - new_hp)
+                            target_pos = context.defender_slot.rect.center if hasattr(context.defender_slot, "rect") else None
+                            defender_owner = "player" if context.defender_slot in self.player_battle_slots else "enemy"
+                            context.set_attack_result(
+                                actual_damage,
+                                target_slot=context.defender_slot,
+                                target_owner=defender_owner,
+                                target_pos=target_pos,
+                                hit_player=False
+                            )
+                            context.last_damage_taken = actual_damage
+                            context.last_attacker_slot = attacker_slot
+                            context.last_attacker_owner = attacker_owner
+
+                            # 触发 AFTER_DAMAGED 技能（如反击）
+                            if actual_damage > 0 and context.defender_slot and context.defender_slot.has_card():
+                                context.set_attacker(context.defender_slot, defender_owner)
+                                for skill in defender_skills:
+                                    after_damaged_effects = skill.get_effects_by_trigger(SkillTrigger.AFTER_DAMAGED)
+                                    for effect in after_damaged_effects:
+                                        if effect.can_trigger(context):
+                                            executed = effect.execute(context)
+                                            if executed:
+                                                anim = effect.get_animation(context)
+                                                if anim:
+                                                    anim.start()
+                                                    self.battle_animations.append(anim)
+                                context.set_attacker(original_attacker, original_attacker_owner)
+                    else:
+                        # 攻击玩家（飞行等技能可能清空了defender_slot）
+                        damage = attacker_card.atk
+                        if defender_hp_ref == "player":
+                            self.player_current_hp -= damage
+                            self.player_health_bar.set_hp(self.player_current_hp)
+                            target_owner = "player"
+                            target_pos = self.player_health_bar.rect.center
+                        else:
+                            self.enemy_current_hp -= damage
+                            self.enemy_health_bar.set_hp(self.enemy_current_hp)
+                            target_owner = "enemy"
+                            target_pos = self.enemy_health_bar.rect.center
+                        context.set_attack_result(
+                            damage,
+                            target_slot=None,
+                            target_owner=target_owner,
+                            target_pos=target_pos,
+                            hit_player=True
+                        )
+                    
+                    # 执行 AFTER_ATTACK 技能（如吸血）
+                    for skill in skills:
+                        after_effects = skill.get_effects_by_trigger(SkillTrigger.AFTER_ATTACK)
+                        for effect in after_effects:
+                            if effect.can_trigger(context):
+                                executed = effect.execute(context)
+                                if executed:
+                                    anim = effect.get_animation(context)
+                                    if anim:
+                                        anim.start()
+                                        self.battle_animations.append(anim)
+                finally:
+                    context.armor_break_amount = 0
+                    context.pending_armor_break_target = None
+                    context.current_attack_animation = None
+
+            target_slot_for_anim = context.defender_slot if context.defender_slot and context.defender_slot.has_card() else None
+            attack_anim = AttackAnimation(attacker_slot, target_slot_for_anim, on_complete=resolve_damage)
             self.battle_animations.append(attack_anim)
-            
-            # 普通攻击伤害
-            if context.defender_slot and context.defender_slot.has_card():
-                # 攻击卡牌
-                defender_card = context.defender_slot.card_data
-                
-                # 计算基础伤害
-                base_damage = attacker_card.atk
-                
-                # 检查防御者是否有防御技能（ON_DAMAGED触发）
-                defender_skills = skill_registry.get_skills_from_traits(defender_card.traits)
-                context.damage_amount = base_damage  # 将伤害存入context
-                
-                # 设置防御者上下文
-                defender_owner = "player" if context.defender_slot in self.player_battle_slots else "enemy"
-                original_attacker = context.attacker_slot
-                context.set_attacker(context.defender_slot, defender_owner)  # 临时切换为防御者视角
-                
-                # 触发防御技能
-                shield_animations = []
-                for skill in defender_skills:
-                    on_damaged_effects = skill.get_effects_by_trigger(SkillTrigger.ON_DAMAGED)
-                    for effect in on_damaged_effects:
-                        if effect.can_trigger(context):
-                            # 执行防御效果（修改context.damage_amount）
-                            effect.execute(context)
-                            # 获取盾牌动画
-                            shield_anim = effect.get_animation(context)
-                            if shield_anim:
-                                shield_anim.start()
-                                shield_animations.append(shield_anim)
-                                self.battle_animations.append(shield_anim)
-                
-                # 恢复攻击者上下文
-                context.attacker_slot = original_attacker
-                
-                # 应用减伤后的伤害
-                final_damage = context.damage_amount
-                old_hp = defender_card.hp
-                new_hp = old_hp - final_damage
-                defender_card.hp = new_hp
-                
-                context.defender_slot.card_data = defender_card
-                context.defender_slot.start_hp_flash(old_hp, new_hp)
-            else:
-                # 攻击玩家（飞行等技能可能清空了defender_slot）
-                if defender_hp_ref == "player":
-                    self.player_current_hp -= attacker_card.atk
-                    self.player_health_bar.set_hp(self.player_current_hp)
-                else:
-                    self.enemy_current_hp -= attacker_card.atk
-                    self.enemy_health_bar.set_hp(self.enemy_current_hp)
-            
-            # 执行 AFTER_ATTACK 技能（如吸血）
-            for skill in skills:
-                after_effects = skill.get_effects_by_trigger(SkillTrigger.AFTER_ATTACK)
-                for effect in after_effects:
-                    if effect.can_trigger(context):
-                        effect.execute(context)
+            context.current_attack_animation = attack_anim
         
         # 1. 收集所有技能动画
         skill_animations = []
@@ -864,6 +1088,9 @@ class BattleBaseScene(BaseScene):
                         skill_anim.on_hit = create_damage_callback(effect)
                         skill_animations.append(skill_anim)
                         break  # 每个技能只取第一个效果
+                    else:
+                        # 允许无动画的技能（例如抽卡/还魂）立即结算
+                        effect.execute(context)
         
         # 2. 播放所有技能动画，只在最后一个动画完成时执行普通攻击
         if skill_animations:
@@ -1060,15 +1287,11 @@ class BattleBaseScene(BaseScene):
         """创建临时卡牌表面（用于动画）"""
         card_surface = pygame.Surface((width, height), pygame.SRCALPHA)
         # 尝试加载图片
-        if card_data.image_path and os.path.exists(card_data.image_path):
-            try:
-                img = pygame.image.load(card_data.image_path).convert_alpha()
-                img = pygame.transform.smoothscale(img, (width, height))
-                card_surface.blit(img, (0, 0))
-            except:
-                card_surface.fill((80, 80, 120))  # 加载失败用灰色
+        cached = get_scaled_image(getattr(card_data, 'image_path', None), (width, height))
+        if cached:
+            card_surface.blit(cached, (0, 0))
         else:
-            card_surface.fill((80, 80, 120))  # 没有图片用灰色
+            card_surface.fill((80, 80, 120))  # 没有图片或加载失败用灰色
         
         pygame.draw.rect(card_surface, (255, 255, 255), (0, 0, width, height), 3) # 边框
         
@@ -1118,6 +1341,8 @@ class BattleBaseScene(BaseScene):
                     # 移动卡牌
                     target_battle_slot.set_card(card_data)
                     waiting_slot.remove_card()
+                    owner = 'player' if owner_name == '玩家' else 'enemy'
+                    self._trigger_on_deploy(target_battle_slot, owner)
 
     def adjust_battle_slots(self):
         """调整战斗槽位（向左填补空位）"""
@@ -1190,3 +1415,86 @@ class BattleBaseScene(BaseScene):
                 duration=0.5
             )
             info['slot'].remove_card() # 移除卡牌
+            self.add_card_to_discard(info['owner'], info['card_data'])
+            self._handle_post_death_traits(info['card_data'], info['owner'])
+
+    def _handle_post_death_traits(self, card_data, owner):
+        traits = getattr(card_data, 'traits', []) or []
+        if not traits:
+            return
+        if "不死" in traits:
+            self._revive_card_to_hand(card_data, owner)
+            return
+        if "复活" in traits:
+            self._revive_card_to_waiting(card_data, owner)
+
+    def _remove_card_from_discard(self, card_data, owner):
+        pile = self.player_discard_pile if owner == 'player' else self.enemy_discard_pile
+        if card_data in pile:
+            pile.remove(card_data)
+            self._update_discard_preview(owner)
+            return True
+        return False
+
+    def _revive_card_to_hand(self, card_data, owner):
+        if not self._remove_card_from_discard(card_data, owner):
+            return
+        hand = self.player_hand if owner == 'player' else self.enemy_hand
+        discard_slot = self.player_discard_slot if owner == 'player' else self.enemy_discard_slot
+        self._reset_card_state(card_data)
+        if discard_slot and self.screen:
+            start_rect = discard_slot.rect.copy()
+            end_rect = pygame.Rect(0, 0, CARD_WIDTH, CARD_HEIGHT)
+            end_rect.center = self.get_hand_entry_position(owner)
+            self.play_blocking_move_animation(card_data, start_rect, end_rect, duration=0.4)
+        hand.add_card(card_data, animate=False)
+
+    def _revive_card_to_waiting(self, card_data, owner):
+        if not hasattr(card_data, '_revive_consumed'):
+            card_data._revive_consumed = False
+        if getattr(card_data, '_revive_consumed', False):
+            return
+        slots = self.player_waiting_slots if owner == 'player' else self.enemy_waiting_slots
+        target_slot = None
+        for slot in slots:
+            if slot and not slot.has_card():
+                target_slot = slot
+                break
+        if not target_slot:
+            return
+        if not self._remove_card_from_discard(card_data, owner):
+            return
+        discard_slot = self.player_discard_slot if owner == 'player' else self.enemy_discard_slot
+        self._reset_card_state(card_data)
+        if discard_slot and self.screen:
+            start_rect = discard_slot.rect.copy()
+            end_rect = target_slot.rect.copy()
+            self.play_blocking_move_animation(card_data, start_rect, end_rect, duration=0.4)
+        target_slot.set_card(card_data)
+        card_data._revive_consumed = True
+
+    def _trigger_on_deploy(self, slot, owner):
+        if not slot or not slot.has_card():
+            return
+        if self.is_slot_silenced(slot):
+            return
+        card = slot.card_data
+        traits = getattr(card, 'traits', []) or []
+        if not traits:
+            return
+        registry = get_skill_registry()
+        skills = registry.get_skills_from_traits(traits)
+        if not skills:
+            return
+        context = BattleContext(self)
+        context.set_attacker(slot, owner)
+        for skill in skills:
+            effects = skill.get_effects_by_trigger(SkillTrigger.ON_DEPLOY)
+            for effect in effects:
+                if not effect.can_trigger(context):
+                    continue
+                animation = effect.get_animation(context)
+                executed = effect.execute(context)
+                if executed and animation:
+                    animation.start()
+                    self.battle_animations.append(animation)
