@@ -3,3 +3,6 @@
 /outputs
 /assets
 /data
+/dist
+/build
+/*.spec

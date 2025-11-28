@@ -112,7 +112,7 @@ GACHA_POOLS = [
      "prob_label": "S特供爆率", "currency": "crystal",
      "single_cost": 120, "ten_cost": 1080,
      "showcase_cards": ["S_001", "S_002", "S_003"]},
-    {"id": "A级限定卡池", "name": "A级限定卡池", "bg_type": "bg/gacha_a",
+    {"id": "A级限定卡池", "name": "A限定卡池", "bg_type": "bg/gacha_a",
      "description": "A特殊卡池",
      "prob_table": "A",
      "prob_label": "A特供爆率", "currency": "gold",

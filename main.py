@@ -1,5 +1,17 @@
-import pygame
+import os
 import sys
+
+def _ensure_working_directory():
+    """Adjust cwd so relative asset paths resolve in both dev and PyInstaller builds."""
+    base_path = getattr(sys, "_MEIPASS", os.path.abspath(os.path.dirname(__file__)))
+    try:
+        os.chdir(base_path)
+    except OSError as err:
+        print(f"[SceneManager] 无法切换工作目录: {err}")
+
+_ensure_working_directory()
+
+import pygame
 import config
 from config import *
 from startup import SplashScreen
@@ -13,6 +25,8 @@ from scenes.battle_menu import BattleMenuScene
 from scenes.draft_scene import DraftScene
 from scenes.battle.draft_battle import DraftBattleScene
 from scenes.battle.simple_battle import SimpleBattleScene
+from scenes.world_map_scene import WorldMapScene
+from scenes.chapter_map_scene import ChapterMapScene
 
 """场景管理器"""
 class SceneManager:
@@ -33,6 +47,7 @@ class SceneManager:
         
         # 场景字典
         self.scenes = {}
+        self.scene_factories = {}
         self.current_scene = None
         
         # 转场效果
@@ -44,23 +59,44 @@ class SceneManager:
         # 开始后台加载（loader 在后台线程运行，on_finished 在主线程 splash 完成时调用）
         self.splash.start_loading(loader_func=self._background_load, on_finished=self._on_splash_finished)
 
-    """注册所有场景"""
+    """注册部分场景"""
     def register_scenes(self):
-        self.scenes["main_menu"] = MainMenuScene(self.screen)
-        self.scenes["gacha_menu"] = GachaMenuScene(self.screen)
-        self.scenes["gacha"] = GachaScene(self.screen)
-        self.scenes["collection"] = CollectionScene(self.screen)
-        self.scenes["deck_builder"] = DeckBuilderScene(self.screen)
-        self.scenes["battle_menu"] = BattleMenuScene(self.screen)
-        self.scenes["draft_scene"] = DraftScene(self.screen)
-        self.scenes["draft_battle"] = DraftBattleScene(self.screen)
-        self.scenes["simple_battle"] = SimpleBattleScene(self.screen)
+        self._register_scene("main_menu", MainMenuScene)
+        self._register_scene("gacha_menu", GachaMenuScene)
+        self._register_scene("gacha", GachaScene)
+        self._register_scene("collection", CollectionScene)
+        self._register_scene("deck_builder", DeckBuilderScene)
+        self._register_scene("battle_menu", BattleMenuScene)
+        self._register_scene("draft_scene", DraftScene)
+        self._register_scene("draft_battle", DraftBattleScene)
+        self._register_scene("simple_battle", SimpleBattleScene)
+        # 单人战役相关场景只在需要时创建
+        self._register_scene("world_map", WorldMapScene, lazy=True)
+        self._register_scene("chapter_map", ChapterMapScene, lazy=True)
+
+    def _register_scene(self, scene_name, scene_cls, lazy=False):
+        if lazy:
+            self.scene_factories[scene_name] = scene_cls
+        else:
+            self.scenes[scene_name] = scene_cls(self.screen)
+
+    def _get_or_create_scene(self, scene_name):
+        if scene_name in self.scenes:
+            return self.scenes[scene_name]
+        if scene_name in self.scene_factories:
+            scene_cls = self.scene_factories.pop(scene_name)
+            scene = scene_cls(self.screen)
+            self.scenes[scene_name] = scene
+            return scene
+        return None
         
     def switch_scene(self, scene_name):
         """切换场景"""
         if scene_name not in self.scenes:
-            print(f"警告: 场景 '{scene_name}' 不存在")
-            return
+            scene = self._get_or_create_scene(scene_name)
+            if scene is None:
+                print(f"警告: 场景 '{scene_name}' 不存在")
+                return
         
         # 如果正在转场，忽略新的切换请求
         if self.transition.is_transitioning:

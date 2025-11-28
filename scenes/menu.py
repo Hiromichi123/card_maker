@@ -7,7 +7,7 @@ from ui.background import ParallaxBackground
 from ui.system_ui import CurrencyLevelUI
 from ui.activity_poster import PosterUI
 
-GAME_TITLE = "Card Battle Master Simulator v0.7.0"
+GAME_TITLE = "Card Battle Master Simulator v0.8.0"
 
 # 海报跳转映射表：index -> scene_name
 poster_to_scene = {

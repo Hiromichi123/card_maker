@@ -1,21 +1,30 @@
 """基于预设的牌库deck 关卡常规战斗场景（玩家 vs AI）"""
 import os
+import json
+import random
 import pygame
 import copy
 from scenes.battle.battle_base_scene import BattleBaseScene # 战斗场景基类
 from utils.card_database import get_card_database, CardData # 卡牌数据库
-from utils.deck_manager import get_deck_manager  # 卡组管理器
+from utils.scene_payload import pop_payload
 
-player_deck_json = "data/deck/player_deck/deck.json"  # 玩家牌库JSON路径
-enemy_deck_json = "data/deck/enemy_deck/deck.json"    # 敌人
+PLAYER_DECK_PATH = "data/deck/player_deck/deck.json"  # 玩家牌库JSON路径
+DEFAULT_ENEMY_DECK_PATH = "data/deck/enemy_deck/deck.json"    # 敌人默认配置
+ENEMY_STAGE_DIR = os.path.join("data", "deck", "enemy_deck", "single_player")
 
 class SimpleBattleScene(BattleBaseScene):
     def __init__(self, screen):
         super().__init__(screen)
+        self._init_stage_settings()
 
+    def _init_stage_settings(self):
         # JSON 文件路径
-        self.player_deck_json = player_deck_json
-        self.enemy_deck_json = enemy_deck_json
+        self.player_deck_json = PLAYER_DECK_PATH
+        self.enemy_deck_json = DEFAULT_ENEMY_DECK_PATH
+        self.stage_id = "1-1"
+        self.stage_name = ""
+        self.default_background_path = self.background_image_path
+        self.enemy_stage_dir = ENEMY_STAGE_DIR
 
         # 工作牌堆（按顺序抽取）
         self.w_pi_player_drale = []
@@ -27,6 +36,14 @@ class SimpleBattleScene(BattleBaseScene):
 
     """====================核心功能===================="""
     def enter(self):
+        payload = pop_payload("simple_battle") or {}
+
+        # 如果已执行过一局战斗，重新初始化基类以保证状态干净
+        if self.battle_initialized:
+            BattleBaseScene.__init__(self, self.screen)
+            self._init_stage_settings()
+
+        self._apply_payload(payload)
         super().enter()
     
     def update(self, dt):
@@ -94,12 +111,14 @@ class SimpleBattleScene(BattleBaseScene):
         # 加载双方decks
         self.player_deck = self._load_deck_json(self.player_deck_json)
         self.enemy_deck = self._load_deck_json(self.enemy_deck_json)
+
+        random.shuffle(self.player_deck)
+        random.shuffle(self.enemy_deck)
+
         # 填充抽牌堆
         self._player_draw_pile = self.player_deck[:]
         self._enemy_draw_pile = self.enemy_deck[:]
-        
-        # 洗牌
-        import random
+
         random.shuffle(self._player_draw_pile)
         random.shuffle(self._enemy_draw_pile)
 
@@ -111,12 +130,12 @@ class SimpleBattleScene(BattleBaseScene):
         self.draw_queue = []
         delay = 0.5
         initial_draw = getattr(self, "INITIAL_HAND_SIZE", 3)
-        for i in range(initial_draw):
+        for _ in range(initial_draw):
             self.draw_queue.append(("player", delay))
             delay += 0.3
             self.draw_queue.append(("enemy", delay))
             delay += 0.3
-        print(f"战斗初始化完成")
+        print(f"战斗初始化完成 - 关卡 {self.stage_id}")
 
     """====================回合控制===================="""
     def switch_turn(self):
@@ -136,8 +155,7 @@ class SimpleBattleScene(BattleBaseScene):
     def _load_deck_json(self, json_path):
         """从json文件或DeckManager获取deck entries，并转换为CardData列表"""
         deck = []
-        deck_mgr = get_deck_manager(save_file=json_path, max_deck_size=12)
-        entries = deck_mgr.get_deck()
+        entries = self._load_deck_entries(json_path)
         db = get_card_database()
         for entry in entries:
             path = entry.get("path", "")
@@ -185,3 +203,60 @@ class SimpleBattleScene(BattleBaseScene):
                 return False
 
         return False
+
+    def _load_deck_entries(self, json_path):
+        if not json_path:
+            return []
+        if not os.path.exists(json_path):
+            print(f"[SimpleBattle] 未找到卡组文件: {json_path}")
+            return []
+        try:
+            with open(json_path, "r", encoding="utf-8") as fp:
+                data = json.load(fp)
+            return data.get("deck", [])
+        except Exception as err:
+            print(f"[SimpleBattle] 读取卡组失败: {json_path} -> {err}")
+            return []
+
+    def _apply_payload(self, payload: dict):
+        stage_id = payload.get("stage_id") or payload.get("stage")
+        if stage_id:
+            self.stage_id = stage_id
+        self.stage_name = payload.get("stage_name", self.stage_name)
+
+        player_deck_path = payload.get("player_deck")
+        if player_deck_path and os.path.exists(player_deck_path):
+            self.player_deck_json = player_deck_path
+        else:
+            self.player_deck_json = PLAYER_DECK_PATH
+
+        requested_enemy_path = payload.get("enemy_deck")
+        self.enemy_deck_json = self._resolve_enemy_deck_path(requested_enemy_path)
+
+        background_path = payload.get("background")
+        self._apply_background(background_path)
+
+    def _resolve_enemy_deck_path(self, requested_path=None) -> str:
+        candidates = []
+        if requested_path:
+            candidates.append(requested_path)
+        if self.stage_id:
+            candidates.append(os.path.join(self.enemy_stage_dir, f"{self.stage_id}.json"))
+        candidates.append(DEFAULT_ENEMY_DECK_PATH)
+        for path in candidates:
+            if path and os.path.exists(path):
+                return path
+        return DEFAULT_ENEMY_DECK_PATH
+
+    def _apply_background(self, requested_path=None):
+        if requested_path and os.path.exists(requested_path):
+            self.background_image_path = requested_path
+        elif self.stage_id:
+            fallback = os.path.join("assets", "poster", f"{self.stage_id}.png")
+            if os.path.exists(fallback):
+                self.background_image_path = fallback
+            else:
+                self.background_image_path = self.default_background_path
+        else:
+            self.background_image_path = self.default_background_path
+        self.background = self.load_background()

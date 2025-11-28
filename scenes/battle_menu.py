@@ -106,7 +106,7 @@ class BattleMenuScene(BaseScene):
             self.button_width, self.button_height,
             "单人战役",
             color=(200, 50, 50), hover_color=(255, 80, 80),
-            on_click=lambda: self.switch_to("simple_battle")
+            on_click=lambda: self.switch_to("world_map")
         )
         self.buttons.append(battle_btn1)
 
