@@ -1,6 +1,6 @@
 """货币和等级系统 UI组件"""
 # 使用示例:
-#     nit中创建实例
+#     init中创建实例
 #     ui = CurrencyLevelUI()
 #     ui.load_state()
 
@@ -34,8 +34,8 @@ xp_bar_size = (int(360 * UI_SCALE), int(32 * UI_SCALE)) # 经验条尺寸
 padding = int(16 * UI_SCALE) # 内边距
 bg_color = (20, 20, 20, 200) # 背景颜色 (RGBA)
 
-UI_START_X = int(30 * UI_SCALE) # UI 起始 X 坐标
-UI_START_Y = int(1500 * UI_SCALE) # UI 起始 Y 坐标
+UI_START_X = int(30 * UI_SCALE) # UI 起始 X 坐标（默认左下角）
+UI_START_Y = int(1500 * UI_SCALE) # UI 起始 Y 坐标（默认左下角）
 
 class CurrencyLevelUI:
     def __init__(self):
@@ -143,6 +143,33 @@ class CurrencyLevelUI:
         except Exception:
             pass
 
+    def get_golds(self) -> int:
+        return int(self.golds)
+
+    def has_enough_golds(self, amount: int) -> bool:
+        try:
+            return self.golds >= int(amount)
+        except Exception:
+            return False
+
+    def spend_golds(self, amount: int) -> bool:
+        try:
+            cost = int(amount)
+        except Exception:
+            return False
+
+        if cost <= 0:
+            return True
+
+        if not self.has_enough_golds(cost):
+            return False
+
+        self.golds -= cost
+        if self.golds < 0:
+            self.golds = 0
+        self.save_state()
+        return True
+
     def add_crystals(self, amount: int):
         try:
             self.crystals += int(amount)
@@ -150,6 +177,33 @@ class CurrencyLevelUI:
                 self.crystals = 0
         except Exception:
             pass
+
+    def get_crystals(self) -> int:
+        return int(self.crystals)
+
+    def has_enough_crystals(self, amount: int) -> bool:
+        try:
+            return self.crystals >= int(amount)
+        except Exception:
+            return False
+
+    def spend_crystals(self, amount: int) -> bool:
+        try:
+            cost = int(amount)
+        except Exception:
+            return False
+
+        if cost <= 0:
+            return True
+
+        if not self.has_enough_crystals(cost):
+            return False
+
+        self.crystals -= cost
+        if self.crystals < 0:
+            self.crystals = 0
+        self.save_state()
+        return True
 
     def add_xp(self, amount: int):
         info = {"levels_gained": 0, "xp_overflow": 0}
@@ -201,8 +255,8 @@ class CurrencyLevelUI:
             self.xp = int(xp)
 
     # ---------------- drawing ----------------
-    def draw(self, surface: pygame.Surface):
-        x, y = (UI_START_X, UI_START_Y)
+    def draw(self, surface: pygame.Surface, position: tuple=(UI_START_X, UI_START_Y)):
+        x, y = position
         # 计算整体尺寸
         width = self.avatar_size + self.padding + max(self.bar_w, 120) + self.padding + self.icon_size + 60
         height = max(self.avatar_size, self.bar_h + self.padding * 2 + 32)

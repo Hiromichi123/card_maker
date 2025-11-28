@@ -7,7 +7,7 @@ from ui.background import ParallaxBackground
 from ui.system_ui import CurrencyLevelUI
 from ui.activity_poster import PosterUI
 
-GAME_TITLE = "Card Battle Master Simulator v0.5.0"
+GAME_TITLE = "Card Battle Master Simulator v0.7.0"
 
 # 海报跳转映射表：index -> scene_name
 poster_to_scene = {
@@ -167,7 +167,7 @@ class MainMenuScene(BaseScene):
             on_click=self.quit_game
         )
         self.buttons.append(quit_btn)
-        
+
     def _on_poster_click(self, idx):
         if idx is None or idx < 0:
             return

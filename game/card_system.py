@@ -356,6 +356,16 @@ class CardSystem:
                 if card_pool[level_dir]:
                     card_path = random.choice(card_pool[level_dir])
                     return level_dir, card_path
+
+        # 如果概率计算未命中，降级到可用卡池的随机卡牌
+        available_levels = [level for level, cards in card_pool.items() if cards]
+        if available_levels:
+            fallback_level = random.choice(available_levels)
+            fallback_card = random.choice(card_pool[fallback_level])
+            return fallback_level, fallback_card
+
+        # 理论上不会发生，如果卡池为空则抛出异常以便定位问题
+        raise ValueError("card_pool is empty; unable to draw card")
         
     def update(self, dt):
         """更新卡牌动画"""

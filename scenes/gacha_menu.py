@@ -1,4 +1,5 @@
 """抽卡菜单场景"""
+import os
 import pygame
 import math
 from config import *
@@ -6,8 +7,11 @@ from scenes.base_scene import BaseScene
 from ui.background import ParallaxBackground
 from ui.button import Button
 from ui.scroll_view import DashboardView
-from utils.card_database import CardDatabase
 from ui.tooltip import CardTooltip
+from ui.system_ui import CurrencyLevelUI, DEFAULT_GOLD_ICON, DEFAULT_CRYSTAL_ICON
+from utils.card_database import CardDatabase
+from utils.scene_payload import set_payload
+from game.gacha_probabilities import GACHA_POOLS # 卡池配置
 
 # 仪表盘属性
 DASHBOARD_ALPHA = 50
@@ -39,8 +43,7 @@ HIGHLIGHT_ALPHA_RANGE = 25  # 选中框透明度呼吸范围
 
 # 功能按钮位置参数
 BUTTON_X_RATIO = 0.6  # 按钮 X 位置比例（相对窗口宽度）
-ENTER_GACHA_Y_RATIO = 0.8  # "进入抽卡" 按钮 Y 位置比例
-BACK_BUTTON_Y_RATIO = 0.85  # "返回主菜单" 按钮 Y 位置比例
+BUTTON_Y_RATIO = 0.85  # 按钮 Y 位置比例
 BUTTON_WIDTH = int(250 * UI_SCALE)  # 功能按钮宽度
 BUTTON_HEIGHT = int(80 * UI_SCALE)  # 功能按钮高度
 
@@ -67,48 +70,41 @@ CARD_DOUBLE_FAN_RATE = 0.3  # 双层扇形前后层卡牌比例，50%表示均�
 CARD_GRID_OFFSET_X_RATIO = 0.056  # 网格排列随机偏移X比例
 CARD_GRID_OFFSET_Y_RATIO = 0.042  # 网格排列随机偏移Y比例
 
+# 抽卡消耗
+SINGLE_GOLD_COST = 500
+TEN_GOLD_COST = 4500
+SINGLE_CRYSTAL_COST = 30
+TEN_CRYSTAL_COST = 270
+NOTICE_DURATION = 2.0
+
 # 字体大小
 TITLE_FONT_SIZE = int(80 * UI_SCALE) # 主标题字体大小
 DESC_FONT_SIZE = int(40 * UI_SCALE) # 描述字体大小
 POOL_NAME_FONT_SIZE = int(45 * UI_SCALE) # 卡池名称字体大小
 
-# 卡池配置列表&展示卡牌
-GACHA_POOLS = [
-    {"id": "normal", "name": "常规卡池", "bg_type": "bg/gacha_normal", "description": "常驻卡池，标准概率",
-     "showcase_cards": ["D_001", "C_001", "B_001", "A_001", "S_001", "SS_001", "SSS_001", "SS_002", "S_002", "A_002", "B_002", "C_002", "D_002"]},
-    {"id": "activity", "name": "活动卡池", "bg_type": "bg/gacha_activity", "description": "限时活动卡池，提高概率",
-     "showcase_cards": ["SSS_001", "SSS_002", "SSS_003", "SSS_004", "SS_001", "SS_002", "S_001", "S_002"]},
-    {"id": "special", "name": "特别卡池", "bg_type": "bg/gacha_special", "description": "特别卡池，高级卡牌",
-     "showcase_cards": ["SS_001", "SS_002", "SS_003", "SS_004", "SS_005", "SS_006"]},
-    {"id": "holiday", "name": "节日卡池", "bg_type": "bg/gacha_holiday", "description": "节日限定卡池",
-     "showcase_cards": ["A_003", "S_003", "SS_003", "SSS_003"]},
-    {"id": "SSS限定", "name": "SSS限定卡池", "bg_type": "bg/gacha_sss", "description": "SSS特殊卡池",
-     "showcase_cards": ["SSS_003", "SSS_004", "SSS_005"]},
-    {"id": "SS限定", "name": "SS限定", "bg_type": "bg/gacha_ss", "description": "SS特殊卡池",
-     "showcase_cards": ["SS_001", "SS_002", "SS_003"]},
-    {"id": "S限定", "name": "S限定", "bg_type": "bg/gacha_s", "description": "S特殊卡池",
-     "showcase_cards": ["S_001", "S_002", "S_003"]},
-    {"id": "A限定", "name": "A限定", "bg_type": "bg/gacha_a", "description": "A特殊卡池",
-     "showcase_cards": ["A_001", "A_002", "A_003", "A_004", "A_005"]}
-]
-
 class GachaMenuScene(BaseScene):
     def __init__(self, screen):
         super().__init__(screen)
         
-        self.selected_pool_index = 0  # 当前选中的卡池索引
         self.blink_timer = 0  # 金色闪烁计时器
         self.glow_intensity = 0  # 发光强度（0-1）
         self.is_snapping = False  # 是否正在吸附对齐
+        self.card_image_cache = {} # 图片缓存
+
+        self.selected_pool_index = 0  # 选中卡池索引
         self.background = self._create_background_for_pool(self.selected_pool_index)
-        
-        # 图片缓存（避免每帧重新加载）
-        self.card_image_cache = {}  # key: (image_path, width, height), value: scaled surface
         
         # 字体
         self.title_font = get_font(TITLE_FONT_SIZE)
         self.desc_font = get_font(DESC_FONT_SIZE)
         self.pool_name_font = get_font(POOL_NAME_FONT_SIZE)
+        self.notice_font = get_font(int(32 * UI_SCALE))
+        self.cost_font = get_font(int(34 * UI_SCALE))
+        self.cost_icon_size = int(32 * UI_SCALE)
+        self.cost_icons = {
+            "gold": self._load_cost_icon(DEFAULT_GOLD_ICON),
+            "crystal": self._load_cost_icon(DEFAULT_CRYSTAL_ICON)
+        }
         
         # 按钮配置
         self.button_height = int(120 * UI_SCALE)
@@ -147,15 +143,70 @@ class GachaMenuScene(BaseScene):
         self.card_tooltip = CardTooltip()  # 卡牌提示框
         self._update_showcase_cards()
 
+        # 货币和等级 UI
+        self.currency_ui = CurrencyLevelUI()
+        self.currency_ui.load_state()
+        self.currency_notice = ""
+        self.currency_notice_timer = 0.0
+
     def _create_background_for_pool(self, pool_index):
         """根据卡池索引创建对应的视差背景"""
         if 0 <= pool_index < len(GACHA_POOLS):
             bg_type = GACHA_POOLS[pool_index]["bg_type"]
         return ParallaxBackground(WINDOW_WIDTH, WINDOW_HEIGHT, bg_type)
 
+    def _load_cost_icon(self, path):
+        size = self.cost_icon_size
+        try:
+            if path and os.path.exists(path):
+                img = pygame.image.load(path).convert_alpha()
+                return pygame.transform.smoothscale(img, (size, size))
+        except Exception:
+            pass
+
+        # fallback simple circle
+        placeholder = pygame.Surface((size, size), pygame.SRCALPHA)
+        pygame.draw.circle(placeholder, (255, 215, 0, 220), (size // 2, size // 2), size // 2)
+        return placeholder
+
+    def _current_pool(self):
+        if 0 <= self.selected_pool_index < len(GACHA_POOLS):
+            return GACHA_POOLS[self.selected_pool_index]
+        return GACHA_POOLS[0]
+
+    def _get_currency_profile(self, pool=None):
+        pool = pool or self._current_pool()
+        currency = pool.get("currency", "gold")
+        single_cost = pool.get("single_cost")
+        ten_cost = pool.get("ten_cost")
+
+        if currency == "crystal":
+            return {
+                "currency": "crystal",
+                "label": "水晶",
+                "suffix": "水晶",
+                "single_cost": single_cost if single_cost is not None else SINGLE_CRYSTAL_COST,
+                "ten_cost": ten_cost if ten_cost is not None else TEN_CRYSTAL_COST,
+                "balance": self.currency_ui.get_crystals(),
+                "has_fn": self.currency_ui.has_enough_crystals,
+                "spend_fn": self.currency_ui.spend_crystals,
+                "icon": self.cost_icons.get("crystal")
+            }
+
+        return {
+            "currency": "gold",
+            "label": "金币",
+            "suffix": "G",
+            "single_cost": single_cost if single_cost is not None else SINGLE_GOLD_COST,
+            "ten_cost": ten_cost if ten_cost is not None else TEN_GOLD_COST,
+            "balance": self.currency_ui.get_golds(),
+            "has_fn": self.currency_ui.has_enough_golds,
+            "spend_fn": self.currency_ui.spend_golds,
+            "icon": self.cost_icons.get("gold")
+        }
+
     def _get_blink_color(self):
-        """获取金色闪烁颜色（呼吸效果）- 参考 MenuButton 平滑动画"""
-        # 使用全局配置的呼吸参数
+        """获取金色闪烁颜色"""
         base_r, base_g, base_b = GLOW_BASE_COLOR
         glow_r = int(base_r + GLOW_INTENSITY_R * self.glow_intensity)
         glow_g = int(base_g + GLOW_INTENSITY_G * self.glow_intensity)
@@ -163,7 +214,7 @@ class GachaMenuScene(BaseScene):
         return (glow_r, glow_g, glow_b)
     
     def _create_dashboard_buttons(self):
-        """创建卡池选项按钮（添加顶部填充）"""
+        """创建卡池选项按钮"""
         self.dashboard_buttons = []
         
         top_padding = self.dashboard_view.height // 2 - self.button_height // 2
@@ -192,17 +243,32 @@ class GachaMenuScene(BaseScene):
     def _create_buttons(self):
         """创建右侧功能按钮"""
         button_x = int(WINDOW_WIDTH * BUTTON_X_RATIO)
-        
-        self.enter_gacha_button = Button(
-            button_x, int(WINDOW_HEIGHT * ENTER_GACHA_Y_RATIO),
+        button_y = int(WINDOW_HEIGHT * BUTTON_Y_RATIO)
+        spacing = self.button_spacing
+
+        # 十连抽按钮
+        self.ten_draw_button = Button(
+            button_x, button_y,
             BUTTON_WIDTH, BUTTON_HEIGHT,
-            "进入抽卡",
-            color=(255, 140, 0), hover_color=(255, 180, 50),
-            on_click=self._enter_gacha
+            f"十 连 抽",
+            color=(255, 170, 80),
+            hover_color=(255, 200, 120),
+            on_click=lambda: self._attempt_draw(10)
         )
-        
-        self. back_button = Button(
-            button_x, int(WINDOW_HEIGHT * BACK_BUTTON_Y_RATIO),
+
+        # 单抽按钮
+        self.single_draw_button = Button(
+            button_x - BUTTON_WIDTH - spacing, button_y,
+            BUTTON_WIDTH, BUTTON_HEIGHT,
+            f"单 抽",
+            color=(255, 170, 80),
+            hover_color=(255, 200, 120),
+            on_click=lambda: self._attempt_draw(1)
+        )
+
+        # 返回主菜单按钮
+        self.back_button = Button(
+            button_x + BUTTON_WIDTH + spacing, button_y,
             BUTTON_WIDTH, BUTTON_HEIGHT,
             "返回主菜单",
             color=(100, 150, 255), hover_color=(130, 180, 255),
@@ -321,9 +387,38 @@ class GachaMenuScene(BaseScene):
                 y = int(center_y - radius_front * math.cos(angle) - card_height // 2)
                 self.card_rects.append(pygame.Rect(x, y, card_width, card_height))
     
-    def _enter_gacha(self):
-        """进入抽卡场景"""
+    def _attempt_draw(self, draw_count: int):
+        pool = self._current_pool()
+        profile = self._get_currency_profile(pool)
+        cost = profile["ten_cost"] if draw_count >= 10 else profile["single_cost"]
+
+        if not profile["has_fn"](cost):
+            self._set_currency_notice(f"{profile['label']}不足，无法抽卡")
+            return
+
+        if not profile["spend_fn"](cost):
+            self._set_currency_notice("抽卡失败，请稍后重试")
+            return
+
+        self._set_currency_notice(f"已消耗 {cost}{profile['suffix']}")
+        self._launch_gacha_scene(pool, draw_count)
+
+    def _launch_gacha_scene(self, pool, draw_count: int):
+        payload = {
+            "pool_name": pool.get("name"),
+            "pool_description": pool.get("description"),
+            "prob_label": pool.get("prob_label"),
+            "prob_table": pool.get("prob_table"),
+            "bg_type": pool.get("bg_type"),
+            "draw_count": 10 if draw_count >= 10 else 1,
+            "auto_delay": 0.65 if draw_count == 1 else 0.85,
+        }
+        set_payload("gacha", payload)
         self.switch_to("gacha")
+
+    def _set_currency_notice(self, text: str):
+        self.currency_notice = text
+        self.currency_notice_timer = NOTICE_DURATION
     
     def handle_event(self, event):
         """处理事件"""
@@ -393,12 +488,13 @@ class GachaMenuScene(BaseScene):
                 self.dashboard_view.scroll_y = max(0, min(self.dashboard_view.scroll_y, self.dashboard_view.max_scroll))
         
         # 功能按钮事件
-        self. enter_gacha_button.handle_event(event)
+        self.single_draw_button.handle_event(event)
+        self.ten_draw_button.handle_event(event)
         self.back_button.handle_event(event)
     
     def update(self, dt):
         self.blink_timer += dt
-        # 更新发光强度（平滑呼吸效果，参考MenuButton）
+        # 更新发光强度
         self.glow_intensity = (math.sin(self.blink_timer * GLOW_SPEED) + 1) / 2  # 0 to 1
         self.background.update(dt)
         
@@ -446,7 +542,13 @@ class GachaMenuScene(BaseScene):
         # 更新选中按钮的闪烁颜色
         if 0 <= self.selected_pool_index < len(self.dashboard_buttons):
             self.dashboard_buttons[self.selected_pool_index].color = self._get_blink_color()
-    
+
+        if self.currency_notice_timer > 0:
+            self.currency_notice_timer -= dt
+            if self.currency_notice_timer <= 0:
+                self.currency_notice_timer = 0.0
+                self.currency_notice = ""
+
     def draw(self):
         self.background.draw(self.screen)
         self._draw_title()
@@ -455,9 +557,38 @@ class GachaMenuScene(BaseScene):
         # 绘制卡牌展示
         self._draw_showcase_cards()
         
+        pool = self._current_pool()
+        currency_profile = self._get_currency_profile(pool) # 获取当前卡池的货币配置
+        single_affordable = currency_profile["balance"] >= currency_profile["single_cost"]
+        ten_affordable = currency_profile["balance"] >= currency_profile["ten_cost"]
+        self._draw_cost_label(self.single_draw_button, currency_profile["single_cost"], single_affordable, currency_profile)
+        self._draw_cost_label(self.ten_draw_button, currency_profile["ten_cost"], ten_affordable, currency_profile)
+
         # 绘制功能按钮
-        self.enter_gacha_button.draw(self.screen)
+        self.single_draw_button.draw(self.screen)
+        self.ten_draw_button.draw(self.screen)
         self.back_button.draw(self.screen)
+
+        if self.currency_notice:
+            notice_text = self.notice_font.render(self.currency_notice, True, (255, 240, 180))
+            notice_rect = notice_text.get_rect()
+            notice_rect.midtop = (
+                self.ten_draw_button.rect.centerx,
+                self.ten_draw_button.rect.bottom + int(10 * UI_SCALE)
+            )
+
+            bg_rect = pygame.Rect(
+                notice_rect.x - 12,
+                notice_rect.y - 6,
+                notice_rect.width + 24,
+                notice_rect.height + 12
+            )
+            bg_surface = pygame.Surface(bg_rect.size, pygame.SRCALPHA)
+            pygame.draw.rect(bg_surface, (20, 20, 20, 180), bg_surface.get_rect(), border_radius=12)
+            self.screen.blit(bg_surface, bg_rect.topleft)
+            self.screen.blit(notice_text, notice_rect)
+
+        self.currency_ui.draw(self.screen, (WINDOW_WIDTH*0.75, WINDOW_HEIGHT*0.03)) # 货币和等级 UI
         
         # 绘制卡牌提示框（最后绘制，在最上层）
         if self.card_tooltip.visible:
@@ -596,3 +727,20 @@ class GachaMenuScene(BaseScene):
                 error_rect = error_text.get_rect(center=(draw_rect.width // 2, draw_rect.height // 2))
                 error_surface.blit(error_text, error_rect)
                 self.screen.blit(error_surface, draw_rect)
+
+    def _draw_cost_label(self, button, cost, affordable, currency_profile):
+        if cost <= 0:
+            return
+        color = (255, 215, 0) if affordable else (255, 80, 80)
+        text_surface = self.cost_font.render(str(cost), True, color)
+        icon = currency_profile.get("icon")
+        gap = int(8 * UI_SCALE) if icon else 0
+        icon_width = icon.get_width() if icon else 0
+        total_width = text_surface.get_width() + icon_width + gap
+        base_x = button.rect.centerx - total_width // 2
+        base_y = button.rect.top - text_surface.get_height() - int(12 * UI_SCALE)
+        self.screen.blit(text_surface, (base_x, base_y))
+        if icon:
+            icon_y = base_y + (text_surface.get_height() - icon.get_height()) // 2
+            icon_x = base_x + text_surface.get_width() + gap
+            self.screen.blit(icon, (icon_x, icon_y))
