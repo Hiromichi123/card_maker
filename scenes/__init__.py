@@ -1,6 +1,6 @@
 """场景模块"""
-from .base_scene import BaseScene
+from .base.base_scene import BaseScene
 from .menu import MainMenuScene
-from .gacha_scene import GachaScene
+from .gacha.gacha_scene import GachaScene
 
 __all__ = ['BaseScene', 'MainMenuScene', 'GachaScene']

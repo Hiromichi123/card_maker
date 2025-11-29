@@ -4,7 +4,7 @@ import os
 import random
 import pygame
 from config import *
-from scenes.base_scene import BaseScene
+from scenes.base.base_scene import BaseScene
 from ui.background import ParallaxBackground
 from ui.menu_button import MenuButton
 from ui.system_ui import CurrencyLevelUI, DEFAULT_GOLD_ICON, DEFAULT_CRYSTAL_ICON

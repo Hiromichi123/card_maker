@@ -4,7 +4,7 @@ import os
 import pygame
 from time import time
 from config import *
-from scenes.base_scene import BaseScene
+from scenes.base.base_scene import BaseScene
 from ui.button import Button
 from utils.battle_component import CardSlot, HealthBar # 战斗场景组件
 from utils.image_cache import get_scaled_image

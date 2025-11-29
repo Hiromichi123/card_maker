@@ -4,7 +4,7 @@ from config import *
 from ui.button import Button
 from ui.background import ParallaxBackground
 from game.card_system import CardSystem
-from scenes.base_scene import BaseScene
+from scenes.base.base_scene import BaseScene
 from utils.inventory import get_inventory
 from utils.scene_payload import pop_payload
 from game.gacha_probabilities import simple_prob, get_prob_table

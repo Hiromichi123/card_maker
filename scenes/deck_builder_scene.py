@@ -1,14 +1,13 @@
-"""
-卡组配置场景
-"""
+"""卡组配置场景"""
 import pygame
 import os
-from scenes.base_scene import BaseScene
+from scenes.base.base_scene import BaseScene
 from ui.button import Button
 from ui.panel import Panel
 from ui.scroll_view import ScrollView
 from utils.inventory import get_inventory
 from utils.deck_manager import get_deck_manager
+from utils.card_database import get_card_database
 from config import *
 
 # 左侧卡组面板
@@ -177,14 +176,13 @@ class DraggableCard:
         overlay.fill((0, 0, 0, 160))
         surface.blit(overlay, rect)
         font = get_font(max(16, int(22 * UI_SCALE)))
-        text = font.render("已用完", True, (255, 200, 200))
+        text = font.render("已上阵", True, (255, 200, 200))
         text_rect = text.get_rect(center=rect.center)
         surface.blit(text, text_rect)
 
 class DeckSlot:
     """卡组槽位类"""
-    # 图片缓存 避免重复加载和缩放
-    _image_cache = {}  # key: (path, width, height), value: scaled surface
+    _image_cache = {}
     
     def __init__(self, x, y, width, height, index):
         self.rect = pygame.Rect(x, y, width, height)
@@ -263,6 +261,7 @@ class DeckBuilderScene(BaseScene):
         super().__init__(screen)
         self.inventory = get_inventory() # 获取库存
         self.deck_manager = get_deck_manager() # 获取卡组管理器
+        self.card_database = get_card_database()
         self.background = self.create_background() # 背景
         
         # 字体
@@ -463,6 +462,16 @@ class DeckBuilderScene(BaseScene):
 
     """获取鼠标悬停的卡牌数据"""
     def get_hovered_card(self, mouse_pos):
+        # 先检查卡组槽位中的卡牌
+        for slot in self.deck_slots:
+            if slot.has_card() and slot.rect.collidepoint(mouse_pos):
+                path = slot.card.get("path")
+                if path:
+                    try:
+                        return self.card_database.get_card_by_path(path)
+                    except Exception:
+                        return None
+        
         # 检查鼠标是否在滚动视图区域内
         if not self.scroll_view.rect.collidepoint(mouse_pos):
             return None
@@ -480,6 +489,7 @@ class DeckBuilderScene(BaseScene):
             if adjusted_rect.collidepoint(local_x, local_y):
                 if hasattr(card, 'card_data'):
                     return card.card_data
+        return None
                 
     """处理事件"""
     def handle_event(self, event):

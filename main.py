@@ -17,19 +17,20 @@ from config import *
 from startup import SplashScreen
 from ui.transition import Transition
 from scenes.menu import MainMenuScene
-from scenes.gacha_scene import GachaScene
-from scenes.gacha_menu import GachaMenuScene
+from scenes.gacha.gacha_scene import GachaScene
+from scenes.gacha.gacha_menu import GachaMenuScene
 from scenes.collection import CollectionScene
 from scenes.deck_builder_scene import DeckBuilderScene
-from scenes.activity_scene import ActivityScene
+from scenes.activity.activity_scene import ActivityScene
+from scenes.activity.maze_scene import ActivityMazeScene
 from scenes.shop_scene import ShopScene
-from scenes.activity_shop_scene import ActivityShopScene
+from scenes.activity.activity_shop_scene import ActivityShopScene
 from scenes.battle_menu import BattleMenuScene
 from scenes.draft_scene import DraftScene
 from scenes.battle.draft_battle import DraftBattleScene
 from scenes.battle.simple_battle import SimpleBattleScene
-from scenes.world_map_scene import WorldMapScene
-from scenes.chapter_map_scene import ChapterMapScene
+from scenes.map.world_map_scene import WorldMapScene
+from scenes.map.chapter_map_scene import ChapterMapScene
 
 """场景管理器"""
 class SceneManager:
@@ -70,6 +71,7 @@ class SceneManager:
         self._register_scene("collection", CollectionScene, lazy=True)
         self._register_scene("deck_builder", DeckBuilderScene, lazy=True)
         self._register_scene("activity_scene", ActivityScene, lazy=True)
+        self._register_scene("activity_maze_scene", ActivityMazeScene, lazy=True)
         self._register_scene("shop_scene", ShopScene, lazy=True)
         self._register_scene("activity_shop_scene", ActivityShopScene, lazy=True)
         self._register_scene("battle_menu", BattleMenuScene, lazy=True)

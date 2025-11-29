@@ -1,7 +1,7 @@
 """图鉴场景"""
 import pygame
 import os
-from scenes.base_scene import BaseScene
+from scenes.base.base_scene import BaseScene
 from ui.button import Button
 from ui.panel import Panel
 from ui.scroll_view import ScrollView

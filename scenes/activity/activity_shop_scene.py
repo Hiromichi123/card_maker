@@ -3,11 +3,10 @@ import random
 import textwrap
 import pygame
 from config import *
-from scenes.base_scene import BaseScene
+from scenes.base.base_scene import BaseScene
 from ui.background import ParallaxBackground
 from ui.menu_button import MenuButton
 from ui.system_ui import CurrencyLevelUI
-
 
 class ActivityShopScene(BaseScene):
     def __init__(self, screen):

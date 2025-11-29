@@ -1,11 +1,10 @@
 """活动大厅场景"""
 import pygame
 from config import *
-from scenes.base_scene import BaseScene
+from scenes.base.base_scene import BaseScene
 from ui.background import ParallaxBackground
 from ui.menu_button import MenuButton
 from ui.system_ui import CurrencyLevelUI
-
 
 class ActivityScene(BaseScene):
     def __init__(self, screen):
@@ -162,7 +161,10 @@ class ActivityScene(BaseScene):
     def _handle_feature_click(self, mouse_pos):
         for idx, rect in enumerate(self.feature_rects):
             if rect.collidepoint(mouse_pos):
-                self._show_notice(f"{self.feature_cards[idx]['title']} 将随版本更新开放")
+                if idx == 0:
+                    self.switch_to("activity_maze_scene")
+                else:
+                    self._show_notice(f"{self.feature_cards[idx]['title']} 将随版本更新开放")
                 return True
         return False
 

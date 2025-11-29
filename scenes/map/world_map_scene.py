@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pygame
 from config import WINDOW_WIDTH, WINDOW_HEIGHT, UI_SCALE, get_font
-from scenes.base_scene import BaseScene
+from scenes.base.base_scene import BaseScene
 from ui.background import ParallaxBackground
 from ui.map_poster import MapPoster
 from ui.poster_detail_panel import PosterDetailPanel

@@ -3,7 +3,7 @@ import os
 import pygame
 import math
 from config import *
-from scenes.base_scene import BaseScene
+from scenes.base.base_scene import BaseScene
 from ui.background import ParallaxBackground
 from ui.button import Button
 from ui.scroll_view import DashboardView

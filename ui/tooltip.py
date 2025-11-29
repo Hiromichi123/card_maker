@@ -20,13 +20,14 @@ class CardTooltip:
         
         # 提示框样式
         self.padding = int(20 * UI_SCALE)
-        self.line_spacing = int(0 * UI_SCALE)
+        self.line_spacing = int(2 * UI_SCALE)
         self.border_width = max(3, int(3 * UI_SCALE))
         
         # 字体
-        self.title_font = get_font(max(24, int(35 * UI_SCALE)))
-        self.info_font = get_font(max(20, int(25 * UI_SCALE)))
-        self.desc_font = get_font(max(16, int(25 * UI_SCALE)))
+        self.stat_font = get_font(int(64 * UI_SCALE)) # ATK / HP
+        self.title_font = get_font(int(35 * UI_SCALE)) # 名称
+        self.info_font = get_font(int(25 * UI_SCALE)) # 其他信息
+        self.desc_font = get_font(int(25 * UI_SCALE)) # 描述
         
     """显示提示框"""  
     def show(self, card_data, mouse_pos):
@@ -42,7 +43,7 @@ class CardTooltip:
             self.card_data = card_data
             self.visible = False
         
-        # 更新鼠标位置（即使已经显示）
+        # 更新鼠标位置
         self.position = mouse_pos
         
         # 检查是否达到延迟时间
@@ -63,7 +64,13 @@ class CardTooltip:
         if not self.card_data:
             return
         
-        lines = [] # 准备文本
+        # 顶部大号 ATK / HP
+        atk_surface = self.stat_font.render(f"{self.card_data.atk}", True, (215, 50, 50))
+        hp_surface = self.stat_font.render(f"{self.card_data.hp}", True, (50, 215, 100))
+        top_section_height = max(atk_surface.get_height(), hp_surface.get_height())
+        stat_gap_min = int(30 * UI_SCALE)
+        
+        lines = [] # 下方信息
         title_text = f"{self.card_data.name}" # 名称
         title_surface = self.title_font.render(title_text, True, COLORS.get(self.card_data.rarity, (255, 255, 255)))
         lines.append(('title', title_surface))
@@ -72,14 +79,9 @@ class CardTooltip:
         rarity_text = f"LV: {self.card_data.rarity}"
         rarity_surface = self.info_font.render(rarity_text, True, (200, 200, 200))
         lines.append(('info', rarity_surface))
-        lines.append(('separator', None)) # 分隔线
         
-        # 属性：ATK/HP/CD
-        atk_text = f"ATK: {self.card_data.atk}"
-        hp_text = f"HP: {self.card_data.hp}"
+        # 属性：CD
         cd_text = f"CD: {self.card_data.cd}"
-        lines.append(('info', self.info_font.render(atk_text, True, (215, 0, 100))))
-        lines.append(('info', self.info_font.render(hp_text, True, (0, 215, 0))))
         lines.append(('info', self.info_font.render(cd_text, True, (255, 215, 100))))
         
         # 特性
@@ -100,22 +102,33 @@ class CardTooltip:
         
         # 计算尺寸
         max_width = max((s.get_width() for t, s in lines if s), default=0)
+        stats_required_width = self.padding * 2 + atk_surface.get_width() + hp_surface.get_width() + stat_gap_min
+        max_width = max(max_width, stats_required_width - self.padding * 2)
         total_height = 0
         
+        separator_height = int(10 * UI_SCALE)
         for line_type, surface in lines:
             if line_type == 'separator':
-                total_height += int(10 * UI_SCALE)
+                total_height += separator_height
             elif surface:
                 total_height += surface.get_height() + self.line_spacing
         
         # 创建surface
         width = max_width + self.padding * 2
-        height = total_height + self.padding * 2
+        line_padding = int(4 * UI_SCALE)
+        post_line_spacing = int(8 * UI_SCALE)
+        height = (
+            self.padding * 2
+            + top_section_height
+            + line_padding
+            + post_line_spacing
+            + total_height
+        )
         
         self.surface = pygame.Surface((width, height), pygame.SRCALPHA)
         
         # 背景
-        self.surface.fill((20, 20, 30, 240))
+        self.surface.fill((20, 20, 30, 180))
         
         # 边框
         border_color = COLORS.get(self.card_data.rarity, (150, 150, 150))
@@ -124,15 +137,33 @@ class CardTooltip:
                         self.border_width,
                         border_radius=max(5, int(10 * UI_SCALE)))
         
-        # 绘制文本
+        # 绘制顶部 ATK / HP
         y = self.padding
+        self.surface.blit(atk_surface, (self.padding, y))
+        hp_x = width - self.padding - hp_surface.get_width()
+        self.surface.blit(hp_surface, (hp_x, y))
+        y += top_section_height
+        sep_y = y + line_padding
+        pygame.draw.line(
+            self.surface,
+            (100, 100, 100),
+            (self.padding, sep_y),
+            (width - self.padding, sep_y),
+            1
+        )
+        y = sep_y + post_line_spacing
+        
+        # 绘制文本
         for line_type, surface in lines:
-            if line_type == 'separator': # 分隔线
-                sep_y = y + int(5 * UI_SCALE)
-                pygame.draw.line(self.surface, (100, 100, 100),
-                               (self.padding, sep_y),
-                               (width - self.padding, sep_y), 1)
-                y += int(10 * UI_SCALE)
+            if line_type == 'separator':
+                pygame.draw.line(
+                    self.surface,
+                    (60, 60, 60),
+                    (self.padding, y),
+                    (width - self.padding, y),
+                    1
+                )
+                y += separator_height
             elif surface:
                 self.surface.blit(surface, (self.padding, y))
                 y += surface.get_height() + self.line_spacing

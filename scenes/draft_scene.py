@@ -1,7 +1,7 @@
 """自选卡牌场景Draft 玩家为双方选择卡牌"""
 import pygame
 import os
-from scenes.base_scene import BaseScene
+from scenes.base.base_scene import BaseScene
 from ui.button import Button
 from ui.panel import Panel
 from utils.draft_manager import get_draft_manager
