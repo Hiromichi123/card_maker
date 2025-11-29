@@ -9,7 +9,9 @@ class MenuButton:
                  hover_color=(130, 180, 255),
                  text_color=(255, 255, 255),
                  font_size=40,
-                 on_click=None):
+                 on_click=None,
+                 persistent_glow=False,
+                 persistent_glow_alpha=120):
 
         self.rect = pygame.Rect(x, y, width, height)
         self.text = text
@@ -18,9 +20,11 @@ class MenuButton:
         self.text_color = text_color
         self.is_hovered = False
         self.on_click = on_click
+        self.persistent_glow = persistent_glow
+        self.persistent_glow_alpha = max(0, min(255, int(persistent_glow_alpha)))
         
         # Animation variables
-        self.hover_alpha = 0  # For fade in/out effect
+        self.hover_alpha = self.persistent_glow_alpha if self.persistent_glow else 0
         self.glow_intensity = 0  # For glow pulsing
         self.glow_time = 0  # Time counter for animation
         
@@ -57,19 +61,25 @@ class MenuButton:
     
     def update(self, dt):
         """Update animations"""
-        # Update hover fade
-        if self.is_hovered:
-            self.hover_alpha = min(255, self.hover_alpha + 1000 * dt)
+        if self.persistent_glow:
             self.glow_time += dt
+            if self.is_hovered:
+                self.hover_alpha = min(255, self.hover_alpha + 800 * dt)
+            else:
+                self.hover_alpha = max(self.persistent_glow_alpha, self.hover_alpha - 300 * dt)
+            self.glow_intensity = (math.sin(self.glow_time * 6) + 1) / 2
         else:
-            self.hover_alpha = max(0, self.hover_alpha - 1000 * dt)
-            self.glow_time = 0
-        
-        # Update glow pulsing (when hovered)
-        if self.is_hovered:
-            self.glow_intensity = (math.sin(self.glow_time * 8) + 1) / 2  # 0 to 1
-        else:
-            self.glow_intensity = 0
+            if self.is_hovered:
+                self.hover_alpha = min(255, self.hover_alpha + 1000 * dt)
+                self.glow_time += dt
+            else:
+                self.hover_alpha = max(0, self.hover_alpha - 1000 * dt)
+                self.glow_time = 0
+            
+            if self.is_hovered:
+                self.glow_intensity = (math.sin(self.glow_time * 8) + 1) / 2  # 0 to 1
+            else:
+                self.glow_intensity = 0
     
     def draw(self, screen):
         """Draw button with modern style"""

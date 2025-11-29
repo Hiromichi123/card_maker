@@ -42,14 +42,18 @@ class MainMenuScene(BaseScene):
         self.button_height = int(50 * UI_SCALE)
         
         # 起始位置（右侧）
-        self.base_x = int(WINDOW_WIDTH * 0.75)
+        self.base_x = int(WINDOW_WIDTH * 0.70)
         self.start_y = int(WINDOW_HEIGHT * 0.25)
         self.button_spacing = int(90 * UI_SCALE)
         self.stagger_offset = int(30 * UI_SCALE)  # 阶梯偏移
+        self.secondary_base_x = self.base_x + int(self.button_width + self.stagger_offset * 2)
         
         self.buttons = []
         self.create_buttons() # 创建按钮列表
         self.quit_flag = False   # 退出标志
+        self.notice_font = get_font(int(32 * UI_SCALE))
+        self.notice_message = ""
+        self.notice_timer = 0.0
     
     def quit_game(self):
         """退出游戏"""
@@ -79,6 +83,12 @@ class MainMenuScene(BaseScene):
         # 更新按钮动画
         for button in self.buttons:
             button.update(dt)
+
+        if self.notice_timer > 0:
+            self.notice_timer -= dt
+            if self.notice_timer <= 0:
+                self.notice_timer = 0.0
+                self.notice_message = ""
     
     def draw(self):
         self.background.draw(self.screen) # 背景
@@ -102,7 +112,27 @@ class MainMenuScene(BaseScene):
         for button in self.buttons:
             button.draw(self.screen)
 
+        if self.notice_message:
+            notice_surface = self.notice_font.render(self.notice_message, True, (255, 240, 200))
+            notice_rect = notice_surface.get_rect(center=(WINDOW_WIDTH // 2, int(WINDOW_HEIGHT * 0.92)))
+            bg_padding = int(16 * UI_SCALE)
+            bg_rect = pygame.Rect(
+                notice_rect.x - bg_padding,
+                notice_rect.y - bg_padding // 2,
+                notice_rect.width + bg_padding * 2,
+                notice_rect.height + bg_padding
+            )
+            overlay = pygame.Surface(bg_rect.size, pygame.SRCALPHA)
+            overlay.fill((20, 20, 20, 180))
+            self.screen.blit(overlay, bg_rect.topleft)
+            self.screen.blit(notice_surface, notice_rect)
+
     def create_buttons(self):
+        self.buttons.clear()
+        self._create_primary_buttons()
+        self._create_secondary_buttons()
+
+    def _create_primary_buttons(self):
         # 战斗按钮
         battle_btn = MenuButton(
             self.base_x, self.start_y,
@@ -167,6 +197,58 @@ class MainMenuScene(BaseScene):
             on_click=self.quit_game
         )
         self.buttons.append(quit_btn)
+
+    def _create_secondary_buttons(self):
+        secondary_specs = [
+            {
+                "label": "活动入口",
+                "color": (255, 220, 120),
+                "hover": (255, 245, 180),
+                "action": lambda: self.switch_to("activity_scene")
+            },
+            {
+                "label": "商店",
+                "color": (180, 120, 255),
+                "hover": (210, 160, 255),
+                "action": lambda: self.switch_to("shop_scene")
+            },
+            {
+                "label": "工坊",
+                "color": (120, 210, 255),
+                "hover": (170, 240, 255)
+            },
+            {
+                "label": "公告",
+                "color": (255, 120, 160),
+                "hover": (255, 170, 200)
+            },
+            {
+                "label": "教学关卡",
+                "color": (120, 255, 200),
+                "hover": (170, 255, 230)
+            },
+        ]
+
+        for idx, spec in enumerate(secondary_specs):
+            action = spec.get("action")
+            if action is None:
+                on_click = lambda text=spec["label"]: self._show_feature_notice(text)
+            else:
+                on_click = action
+
+            btn = MenuButton(
+                self.secondary_base_x - self.stagger_offset * idx,
+                self.start_y + self.button_spacing * idx,
+                self.button_width, self.button_height,
+                spec["label"], color=spec["color"],
+                hover_color=spec["hover"], text_color=(30, 30, 30),
+                on_click=on_click
+            )
+            self.buttons.append(btn)
+
+    def _show_feature_notice(self, feature_name: str):
+        self.notice_message = f"{feature_name} 功能即将开放"
+        self.notice_timer = 2.0
 
     def _on_poster_click(self, idx):
         if idx is None or idx < 0:

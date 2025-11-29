@@ -1,4 +1,5 @@
 """卡堆渲染器"""
+import os
 import pygame
 from config import *
 
@@ -18,10 +19,22 @@ class DeckRenderer:
         self.create_card_back() # 创建卡背图片
         
     def create_card_back(self):
-        """创建卡背"""
-        self.card_back = pygame.Surface((self.card_width, self.card_height))
+        """加载或创建卡背"""
+        asset_path = os.path.join("assets", "ui", "card_back.png")
+        if os.path.exists(asset_path):
+            try:
+                image = pygame.image.load(asset_path).convert_alpha()
+                self.card_back = pygame.transform.smoothscale(
+                    image, (self.card_width, self.card_height)
+                )
+                return
+            except Exception as err:
+                print(f"卡背资源加载失败 {asset_path}: {err}")
         
-        # 渐变背景
+        self.card_back = self._create_fallback_card_back()
+
+    def _create_fallback_card_back(self):
+        surface = pygame.Surface((self.card_width, self.card_height))
         for y in range(self.card_height):
             ratio = y / self.card_height
             color = (
@@ -29,29 +42,28 @@ class DeckRenderer:
                 int(30 + ratio * 80),
                 int(80 + ratio * 100)
             )
-            pygame.draw.line(self.card_back, color, 
-                           (0, y), (self.card_width, y))
-        
-        # 边框
+            pygame.draw.line(surface, color, (0, y), (self.card_width, y))
         border_color = (100, 150, 200)
         border_width = max(3, int(4 * UI_SCALE))
-        pygame.draw.rect(self.card_back, border_color,
-                        (0, 0, self.card_width, self.card_height),
-                        border_width, border_radius=max(8, int(12 * UI_SCALE)))
-        
-        # 装饰图案（中央菱形）
+        pygame.draw.rect(
+            surface,
+            border_color,
+            (0, 0, self.card_width, self.card_height),
+            border_width,
+            border_radius=max(8, int(12 * UI_SCALE))
+        )
         center_x = self.card_width // 2
         center_y = self.card_height // 2
         size = int(40 * UI_SCALE)
-        
         diamond_points = [
             (center_x, center_y - size),
             (center_x + size, center_y),
             (center_x, center_y + size),
             (center_x - size, center_y)
         ]
-        pygame.draw.polygon(self.card_back, (150, 200, 255), diamond_points)
-        pygame.draw.polygon(self.card_back, (100, 150, 200), diamond_points, 3)
+        pygame.draw.polygon(surface, (150, 200, 255), diamond_points)
+        pygame.draw.polygon(surface, (100, 150, 200), diamond_points, 3)
+        return surface
         
     def set_count(self, count):
         """设置剩余卡牌数"""

@@ -21,6 +21,9 @@ from scenes.gacha_scene import GachaScene
 from scenes.gacha_menu import GachaMenuScene
 from scenes.collection import CollectionScene
 from scenes.deck_builder_scene import DeckBuilderScene
+from scenes.activity_scene import ActivityScene
+from scenes.shop_scene import ShopScene
+from scenes.activity_shop_scene import ActivityShopScene
 from scenes.battle_menu import BattleMenuScene
 from scenes.draft_scene import DraftScene
 from scenes.battle.draft_battle import DraftBattleScene
@@ -61,16 +64,18 @@ class SceneManager:
 
     """注册部分场景"""
     def register_scenes(self):
-        self._register_scene("main_menu", MainMenuScene)
-        self._register_scene("gacha_menu", GachaMenuScene)
-        self._register_scene("gacha", GachaScene)
-        self._register_scene("collection", CollectionScene)
-        self._register_scene("deck_builder", DeckBuilderScene)
-        self._register_scene("battle_menu", BattleMenuScene)
-        self._register_scene("draft_scene", DraftScene)
-        self._register_scene("draft_battle", DraftBattleScene)
-        self._register_scene("simple_battle", SimpleBattleScene)
-        # 单人战役相关场景只在需要时创建
+        self._register_scene("main_menu", MainMenuScene, lazy=True)
+        self._register_scene("gacha_menu", GachaMenuScene, lazy=True)
+        self._register_scene("gacha", GachaScene, lazy=True)
+        self._register_scene("collection", CollectionScene, lazy=True)
+        self._register_scene("deck_builder", DeckBuilderScene, lazy=True)
+        self._register_scene("activity_scene", ActivityScene, lazy=True)
+        self._register_scene("shop_scene", ShopScene, lazy=True)
+        self._register_scene("activity_shop_scene", ActivityShopScene, lazy=True)
+        self._register_scene("battle_menu", BattleMenuScene, lazy=True)
+        self._register_scene("draft_scene", DraftScene, lazy=True)
+        self._register_scene("draft_battle", DraftBattleScene, lazy=True)
+        self._register_scene("simple_battle", SimpleBattleScene, lazy=True)
         self._register_scene("world_map", WorldMapScene, lazy=True)
         self._register_scene("chapter_map", ChapterMapScene, lazy=True)
 

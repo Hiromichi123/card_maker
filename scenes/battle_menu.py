@@ -100,59 +100,61 @@ class BattleMenuScene(BaseScene):
             button.draw(self.screen)
 
     def create_buttons(self):
-        # 单人战役
-        battle_btn1 = MenuButton(
-            self.base_x, self.start_y,
-            self.button_width, self.button_height,
-            "单人战役",
-            color=(200, 50, 50), hover_color=(255, 80, 80),
-            on_click=lambda: self.switch_to("world_map")
-        )
-        self.buttons.append(battle_btn1)
+        button_specs = [
+            {
+                "label": "单人战役",
+                "color": (200, 50, 50),
+                "hover": (255, 80, 80),
+                "action": lambda: self.switch_to("world_map")
+            },
+            {
+                "label": "活动模式",
+                "color": (255, 220, 120),
+                "hover": (255, 255, 180),
+                "action": lambda: self.switch_to("activity_scene"),
+                "persistent_glow": True,
+                "glow_alpha": 255
+            },
+            {
+                "label": "局域网 卡组对战",
+                "color": (200, 70, 50),
+                "hover": (255, 100, 80),
+                "action": lambda: self.switch_to("simple_battle")
+            },
+            {
+                "label": "局域网 任选对战",
+                "color": (200, 90, 50),
+                "hover": (255, 120, 80),
+                "action": lambda: self.switch_to("simple_battle")
+            },
+            {
+                "label": "本地 任选对战（双人）",
+                "color": (200, 110, 50),
+                "hover": (255, 140, 80),
+                "action": lambda: self.switch_to("draft_scene")
+            },
+            {
+                "label": "返回主菜单",
+                "color": (100, 150, 255),
+                "hover": (150, 200, 255),
+                "action": lambda: self.switch_to("main_menu")
+            }
+        ]
 
-        # 局域网 卡组对战
-        battle_btn2 = MenuButton(
-            self.base_x - self.stagger_offset, 
-            self.start_y + self.button_spacing,
-            self.button_width, self.button_height,
-            "局域网 卡组对战",
-            color=(200, 70, 50), hover_color=(255, 100, 80),
-            on_click=lambda: self.switch_to("simple_battle")
-        )
-        self.buttons.append(battle_btn2)
-
-        # 局域网 任选对战
-        battle_btn3 = MenuButton(
-            self.base_x - self.stagger_offset * 2, 
-            self.start_y + self.button_spacing * 2,
-            self.button_width, self.button_height,
-            "局域网 任选对战",
-            color=(200, 90, 50), hover_color=(255, 120, 80),
-            on_click=lambda: self.switch_to("simple_battle")
-        )
-        self.buttons.append(battle_btn3)
-
-        # 本地 任选对战（双人）
-        battle_btn4 = MenuButton(
-            self.base_x - self.stagger_offset * 3, 
-            self.start_y + self.button_spacing * 3,
-            self.button_width, self.button_height,
-            "本地 任选对战（双人）",
-            color=(200, 110, 50), hover_color=(255, 140, 80),
-            on_click=lambda: self.switch_to("draft_scene")
-        )
-        self.buttons.append(battle_btn4)
-
-        # 返回主菜单
-        back_btn = MenuButton(
-            self.base_x - self.stagger_offset * 4,
-            self.start_y + self.button_spacing * 4,
-            self.button_width, self.button_height,
-            "返回主菜单",
-            color=(100, 150, 255), hover_color=(150, 200, 255),
-            on_click=lambda: self.switch_to("main_menu")
-        )
-        self.buttons.append(back_btn)
+        for idx, spec in enumerate(button_specs):
+            btn = MenuButton(
+                self.base_x - self.stagger_offset * idx,
+                self.start_y + self.button_spacing * idx,
+                self.button_width,
+                self.button_height,
+                spec["label"],
+                color=spec["color"],
+                hover_color=spec["hover"],
+                on_click=spec["action"],
+                persistent_glow=spec.get("persistent_glow", False),
+                persistent_glow_alpha=spec.get("glow_alpha", 120)
+            )
+            self.buttons.append(btn)
         
     def _on_poster_click(self, idx):
         if idx is None or idx < 0:

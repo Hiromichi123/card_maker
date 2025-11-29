@@ -47,6 +47,8 @@ class DraggableCard:
         self.is_hovered = False
         self.is_dragging = False
         self.drag_offset = (0, 0)
+        self.count = card_data.get("count", 1)
+        self.is_depleted = self.count <= 0
 
         from utils.card_database import get_card_database
         db = get_card_database()
@@ -116,21 +118,68 @@ class DraggableCard:
         """重置到原始位置"""
         self.rect.x, self.rect.y = self.original_pos
     
-    def draw(self, surface):
-        """绘制卡牌"""
-        surface.blit(self.image, self.rect) # 绘制图片
+    def update_count(self, count):
+        """更新剩余数量"""
+        self.count = max(0, count)
+        self.data["count"] = self.count
+        self.is_depleted = self.count <= 0
+        if self.is_depleted:
+            self.is_hovered = False
+
+    def draw(self, surface, override_rect=None, show_count=None):
+        """绘制卡牌，可指定覆盖位置"""
+        target_rect = override_rect if override_rect is not None else self.rect
+        surface.blit(self.image, target_rect)
         
         # 拖拽时的半透明效果
-        if self.is_dragging:
+        if self.is_dragging and override_rect is None:
             overlay = pygame.Surface((self.rect.width, self.rect.height), pygame.SRCALPHA)
             overlay.fill((255, 255, 255, 150))
             surface.blit(overlay, self.rect)
         
         # 悬停或拖拽时的边框
-        if self.is_hovered or self.is_dragging:
+        if self.is_hovered or (self.is_dragging and override_rect is None):
             border_width = max(3, int(4 * UI_SCALE))
             border_color = COLORS.get(self.data.get("rarity", "D"), (255, 255, 255))
-            pygame.draw.rect(surface, border_color, self.rect, border_width)
+            pygame.draw.rect(surface, border_color, target_rect, border_width)
+        
+        # 显示数量徽章（仅用于收藏列表）
+        if show_count is None:
+            show_count = self.source == "collection" and not self.is_dragging
+        if show_count:
+            self.draw_count_badge(surface, target_rect)
+        
+        # 用尽状态遮罩
+        if self.source == "collection" and self.is_depleted:
+            self.draw_depleted_overlay(surface, target_rect)
+
+    def draw_count_badge(self, surface, rect):
+        """绘制数量徽章"""
+        badge_size = max(30, int(40 * UI_SCALE))
+        badge_rect = pygame.Rect(
+            rect.right - badge_size - 5,
+            rect.y + 5,
+            badge_size,
+            badge_size
+        )
+        center = badge_rect.center
+        pygame.draw.circle(surface, (0, 0, 0, 180), center, badge_size // 2)
+        pygame.draw.circle(surface, (255, 215, 0), center, badge_size // 2, 2)
+        font = get_font(max(14, int(18 * UI_SCALE)))
+        count_text = f"x{self.count}"
+        text = font.render(count_text, True, (255, 255, 255))
+        text_rect = text.get_rect(center=center)
+        surface.blit(text, text_rect)
+
+    def draw_depleted_overlay(self, surface, rect):
+        """绘制用尽遮罩"""
+        overlay = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 160))
+        surface.blit(overlay, rect)
+        font = get_font(max(16, int(22 * UI_SCALE)))
+        text = font.render("已用完", True, (255, 200, 200))
+        text_rect = text.get_rect(center=rect.center)
+        surface.blit(text, text_rect)
 
 class DeckSlot:
     """卡组槽位类"""
@@ -223,10 +272,13 @@ class DeckBuilderScene(BaseScene):
         
         self.deck_slots = [] # 卡组槽位（12个）
         self.collection_cards = [] # 收藏卡牌列表
+        self.collection_card_map = {}
+        self.card_counts = {}
         
         # 拖拽相关
         self.dragging_card = None
         self.drag_source_index = None
+        self.dragging_collection_path = None
         
         self.create_ui() # 创建UI
         self.reload_cards() # 加载卡牌
@@ -312,6 +364,8 @@ class DeckBuilderScene(BaseScene):
     """重新加载卡牌"""
     def reload_cards(self):
         deck_data = self.deck_manager.get_deck()
+        for slot in self.deck_slots:
+            slot.remove_card()
         for i, card_data in enumerate(deck_data):
             if i < len(self.deck_slots):
                 self.deck_slots[i].set_card(card_data)
@@ -322,8 +376,19 @@ class DeckBuilderScene(BaseScene):
         rarity_order = {"SSS": 0, "SS": 1, "S": 2, "A": 3, "B": 4, "C": 5, "D": 6}
         collection_data.sort(key=lambda x: (rarity_order.get(x["rarity"], 99)))
         
+        # 计算剩余数量
+        self.card_counts = {card["path"]: card.get("count", 1) for card in collection_data}
+        for slot in self.deck_slots:
+            if slot.has_card():
+                path = slot.card.get("path")
+                if path in self.card_counts:
+                    self.card_counts[path] = max(0, self.card_counts[path] - 1)
+                else:
+                    self.card_counts[path] = 0
+        
         # 创建卡牌widget
         self.collection_cards = []
+        self.collection_card_map = {}
         for i, card_data in enumerate(collection_data):
             row = i // cards_per_row
             col = i % cards_per_row
@@ -331,8 +396,13 @@ class DeckBuilderScene(BaseScene):
             x = card_spacing + col * (card_width + card_spacing)
             y = card_spacing + row * (card_height + card_spacing)
             
-            card_widget = DraggableCard(card_data, x, y, card_width, card_height, "collection")
+            available_count = self.card_counts.get(card_data["path"], card_data.get("count", 0))
+            card_copy = dict(card_data)
+            card_copy["count"] = available_count
+            card_widget = DraggableCard(card_copy, x, y, card_width, card_height, "collection")
+            card_widget.update_count(available_count)
             self.collection_cards.append(card_widget)
+            self.collection_card_map[card_data["path"]] = card_widget
         
         # 更新滚动视图高度
         if collection_data:
@@ -342,6 +412,24 @@ class DeckBuilderScene(BaseScene):
             content_height = 0
         
         self.scroll_view.update_content_height(content_height)
+    
+    def _update_card_widget(self, card_path):
+        widget = self.collection_card_map.get(card_path)
+        if widget:
+            widget.update_count(self.card_counts.get(card_path, 0))
+    
+    def _decrement_card_count(self, card_path):
+        if card_path not in self.card_counts:
+            self.card_counts[card_path] = 0
+        if self.card_counts[card_path] <= 0:
+            return False
+        self.card_counts[card_path] -= 1
+        self._update_card_widget(card_path)
+        return True
+    
+    def _increment_card_count(self, card_path):
+        self.card_counts[card_path] = self.card_counts.get(card_path, 0) + 1
+        self._update_card_widget(card_path)
     
     def save_deck(self):
         """保存卡组"""
@@ -360,7 +448,10 @@ class DeckBuilderScene(BaseScene):
     def clear_deck(self):
         """清空卡组"""
         for slot in self.deck_slots:
-            slot.remove_card()
+            if slot.has_card():
+                removed = slot.remove_card()
+                if removed and removed.get("path"):
+                    self._increment_card_count(removed["path"])
         print("✔卡组已清空")
     
     def enter(self):
@@ -413,9 +504,11 @@ class DeckBuilderScene(BaseScene):
                 
                 for card in self.collection_cards:
                     if card.rect.collidepoint(local_mouse_pos):
+                        if card.data.get("count", 0) <= 0:
+                            continue
                         # 开始拖拽
                         self.dragging_card = DraggableCard(
-                            card.data,
+                            dict(card.data),
                             mouse_pos[0] - card.rect.width // 2,
                             mouse_pos[1] - card.rect.height // 2,
                             int(120 * UI_SCALE),
@@ -423,6 +516,7 @@ class DeckBuilderScene(BaseScene):
                             "collection"
                         )
                         self.dragging_card.start_drag(mouse_pos)
+                        self.dragging_collection_path = card.data.get("path")
                         break
             
             # 检查是否点击卡组槽位中的卡牌
@@ -439,6 +533,7 @@ class DeckBuilderScene(BaseScene):
                     )
                     self.dragging_card.start_drag(mouse_pos)
                     self.drag_source_index = i
+                    self.dragging_collection_path = None
                     slot.remove_card()  # 移除槽位中的卡牌
                     break
         
@@ -469,6 +564,7 @@ class DeckBuilderScene(BaseScene):
             if self.dragging_card:
                 mouse_pos = event.pos
                 dropped = False
+                source_is_collection = self.dragging_card.source == "collection"
                 
                 # 检查是否放置到卡组槽位
                 for slot in self.deck_slots:
@@ -477,13 +573,18 @@ class DeckBuilderScene(BaseScene):
                         if slot.has_card(): # 槽位已有卡牌，交换
                             old_card = slot.remove_card()
                             slot.set_card(self.dragging_card.data)
-                            if self.drag_source_index is not None:
+                            if source_is_collection and old_card and old_card.get("path"):
+                                self._increment_card_count(old_card["path"])
+                            elif self.drag_source_index is not None and old_card:
                                 self.deck_slots[self.drag_source_index].set_card(old_card) # 如果拖拽来源是卡组，将旧卡牌放回
                         else:
                             slot.set_card(self.dragging_card.data) # 空槽位，直接放置
                         
                         dropped = True
                         break
+                
+                if dropped and source_is_collection:
+                    self._decrement_card_count(self.dragging_card.data.get("path"))
                 
                 # 如果没有放置成功且来源是卡组，放回原位
                 if not dropped and self.drag_source_index is not None:
@@ -492,6 +593,7 @@ class DeckBuilderScene(BaseScene):
                 # 结束拖拽
                 self.dragging_card = None
                 self.drag_source_index = None
+                self.dragging_collection_path = None
         
         # 按钮事件
         self.save_button.handle_event(event)
@@ -541,7 +643,7 @@ class DeckBuilderScene(BaseScene):
         
         # 拖拽中的卡牌（最后绘制，在最上层）
         if self.dragging_card:
-            self.dragging_card.draw(self.screen)
+            self.dragging_card.draw(self.screen, show_count=False)
     
     def draw_title(self):
         """绘制标题"""
@@ -574,7 +676,11 @@ class DeckBuilderScene(BaseScene):
         else:
             for card in self.collection_cards:
                 # 跳过正在拖拽的卡牌
-                if self.dragging_card and card.data == self.dragging_card.data:
+                if (
+                    self.dragging_card
+                    and self.dragging_card.source == "collection"
+                    and self.dragging_collection_path == card.data.get("path")
+                ):
                     continue
                 
                 # 创建临时rect用于绘制
@@ -583,15 +689,6 @@ class DeckBuilderScene(BaseScene):
                 
                 # 检查是否在可见区域
                 if -card.rect.height < temp_rect.y < self.scroll_view.rect.height:
-                    temp_pos = (card.rect.x, temp_rect.y)
-                    surface.blit(card.image, temp_pos)
-                    
-                    # 边框
-                    if card.is_hovered:
-                        border_color = COLORS.get(card.data.get("rarity", "D"), (255, 255, 255))
-                        border_width = max(3, int(4 * UI_SCALE))
-                        pygame.draw.rect(surface, border_color, 
-                                       (temp_pos[0], temp_pos[1], card.rect.width, card.rect.height), 
-                                       border_width)
+                    card.draw(surface, override_rect=temp_rect, show_count=True)
         
         self.scroll_view.end_draw(self.screen)

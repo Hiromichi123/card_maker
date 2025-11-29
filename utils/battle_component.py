@@ -281,10 +281,10 @@ class HealthBar:
         
     def draw(self, screen):
         """绘制血量条"""
-        # 背景
-        bg_color = (50, 50, 50)
-        pygame.draw.rect(screen, bg_color, self.rect, 
-                        border_radius=max(5, int(10 * UI_SCALE)))
+        # 半透明背景
+        bg_surface = pygame.Surface((self.rect.width, self.rect.height), pygame.SRCALPHA)
+        bg_surface.fill((10, 10, 20, 160))
+        screen.blit(bg_surface, self.rect)
         
         # 血量条
         hp_ratio = self.animated_hp / self.max_hp
@@ -301,14 +301,29 @@ class HealthBar:
             else:
                 hp_color = (255, 100, 100) if self.is_player else (100, 255, 100)
             
-            pygame.draw.rect(screen, hp_color, hp_rect, 
-                           border_radius=max(5, int(10 * UI_SCALE)))
+            hp_surface = pygame.Surface((hp_rect.width, hp_rect.height), pygame.SRCALPHA)
+            hp_surface.fill((*hp_color, 220))
+            screen.blit(hp_surface, hp_rect)
         
-        # 边框
-        border_color = (100, 100, 100)
-        border_width = max(2, int(3 * UI_SCALE))
-        pygame.draw.rect(screen, border_color, self.rect, border_width,
-                        border_radius=max(5, int(10 * UI_SCALE)))
+        # 金色边框与外发光
+        border_radius = max(5, int(10 * UI_SCALE))
+        border_width = max(3, int(4 * UI_SCALE))
+        glow_rect = self.rect.inflate(int(6 * UI_SCALE), int(6 * UI_SCALE))
+        glow_surface = pygame.Surface(glow_rect.size, pygame.SRCALPHA)
+        pygame.draw.rect(
+            glow_surface,
+            (255, 215, 0, 50),
+            glow_surface.get_rect(),
+            border_radius=border_radius + int(3 * UI_SCALE)
+        )
+        screen.blit(glow_surface, glow_rect.topleft)
+        pygame.draw.rect(
+            screen,
+            (255, 215, 0),
+            self.rect,
+            border_width,
+            border_radius=border_radius
+        )
         
         # 血量数字
         font = get_font(max(16, int(24 * UI_SCALE)))

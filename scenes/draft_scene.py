@@ -1,12 +1,11 @@
-"""
-自选卡牌场景Draft 玩家为双方选择卡牌
-"""
+"""自选卡牌场景Draft 玩家为双方选择卡牌"""
 import pygame
 import os
 from scenes.base_scene import BaseScene
 from ui.button import Button
 from ui.panel import Panel
 from utils.draft_manager import get_draft_manager
+from utils.card_database import get_card_database
 from config import *
 
 # ==================== Draft场景配置 ====================
@@ -44,7 +43,6 @@ class DraftCard:
         self.load_image()
 
         # 从数据库加载完整的 CardData
-        from utils.card_database import get_card_database
         db = get_card_database()
         self.card_data = db.get_card_by_path(card_data.get('path'))
     
@@ -325,9 +323,10 @@ class DraftScene(BaseScene):
             for card in self.draft_cards:
                 if not card.is_picked and card.rect.collidepoint(mouse_pos):
                     # 选择卡牌
+                    picking_player = self.draft_manager.current_turn
                     if self.draft_manager.pick_card(card.index):
                         card.is_picked = True
-                        card.picked_by = self.draft_manager.current_turn if self.draft_manager.current_turn == "player1" else "player2"
+                        card.picked_by = picking_player
                         
                         # 检查是否完成
                         if self.draft_manager.is_draft_complete():

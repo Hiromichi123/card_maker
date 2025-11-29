@@ -18,7 +18,7 @@ class DraftBattleScene(BattleBaseScene):
         # draft自动模式（仅用于敌人AI，可控制是否启用）
         self.enemy_auto_mode = True    # 敌人是否自动
         self.auto_timer = 0.0
-        self.auto_delay = 1.0          # 敌人AI思考时间
+        self.auto_delay = 0.5          # 敌人AI思考时间
 
     """====================核心功能===================="""
     def enter(self):
@@ -157,7 +157,7 @@ class DraftBattleScene(BattleBaseScene):
             pygame.time.delay(500)  # 延迟0.5秒（给玩家反应时间）
             self.end_turn()  # 进入战斗，结束回合
         elif self.current_turn == "player2" and self.enemy_auto_mode: # 有手牌，正常提示
-            print("[AI] 敌人AI将在 1.5秒后自动出牌")
+            print("[AI] 敌人AI将自动出牌")
 
     """====================其他===================="""
     def create_buttons(self):

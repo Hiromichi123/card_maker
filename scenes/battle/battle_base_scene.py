@@ -1,4 +1,5 @@
 """战斗场景基类"""
+import math
 import os
 import pygame
 from time import time
@@ -49,6 +50,7 @@ ENEMY_DISCARD_Y_RATIO = 0.05   # 敌人弃牌堆Y位置
 # 血量条配置
 HEALTH_BAR_WIDTH = 400         # 宽度
 HEALTH_BAR_HEIGHT = 80         # 高度
+HEALTH_X_RATIO = 0.05         # 血量条X位置
 PLAYER_HEALTH_Y_RATIO = 0.85   # 玩家血量条Y位置
 ENEMY_HEALTH_Y_RATIO = 0.08    # 敌人血量条Y位置
 # 玩家和敌人血量
@@ -69,10 +71,15 @@ class BattleBaseScene(BaseScene):
         self.background = self.load_background()
         
         # 字体
-        self.title_font = get_font(max(20, int(32 * UI_SCALE)))
-        self.info_font = get_font(max(14, int(20 * UI_SCALE)))
+        self.title_font = get_font(int(32 * UI_SCALE))
+        self.info_font = get_font(int(20 * UI_SCALE))
 
         self.load_turn_indicator_bg() # 回合指示器背景
+        self.turn_indicator_anim_progress = 0.0
+        self.turn_indicator_anim_duration = 0.6
+        self.turn_indicator_animating = False
+        self.turn_indicator_scale = 1.0
+        self.turn_indicator_flash_alpha = 0
 
         # 血量初始化
         self.player_max_hp = PLAYER_MAX_HP
@@ -154,6 +161,7 @@ class BattleBaseScene(BaseScene):
             return
         
         super().update(dt)
+        self.update_turn_indicator_animation(dt)
         
         # 更新血量条
         self.player_health_bar.update(dt)
@@ -270,6 +278,7 @@ class BattleBaseScene(BaseScene):
         # 为当前回合玩家抽一张卡
         draw_who = "player" if self.current_turn == "player1" else "enemy"
         self.draw_card(draw_who, animate=True)
+        self.start_turn_indicator_animation()
 
     def end_turn(self):
         """结束回合"""
@@ -441,14 +450,14 @@ class BattleBaseScene(BaseScene):
     def load_turn_indicator_bg(self):
         """加载回合指示器背景"""
         import os
-        bg_path = "assets/turn_indicator_bg.png"
+        bg_path = os.path.join("assets", "ui", "indicator.png")
         
         if os.path.exists(bg_path):
             try:
-                self.turn_bg = pygame.image.load(bg_path)
+                self.turn_bg = pygame.image.load(bg_path).convert_alpha()
                 # 缩放到合适大小
-                bg_width = int(200 * UI_SCALE)
-                bg_height = int(150 * UI_SCALE)
+                bg_width = int(300 * UI_SCALE)
+                bg_height = int(300 * UI_SCALE)
                 self.turn_bg = pygame.transform.smoothscale(self.turn_bg, (bg_width, bg_height))
             except:
                 self.turn_bg = self.create_default_turn_bg()
@@ -457,14 +466,14 @@ class BattleBaseScene(BaseScene):
         
         # 位置（左侧中间）
         self.turn_bg_rect = self.turn_bg.get_rect(
-            left=int(WINDOW_WIDTH * 0.02),
-            centery=int(WINDOW_HEIGHT * 0.5)
+            left=int(WINDOW_WIDTH * 0.05),
+            centery=int(WINDOW_HEIGHT * 0.45)
         )
     
     def create_default_turn_bg(self):
         """创建默认回合指示器背景"""
-        width = int(200 * UI_SCALE)
-        height = int(150 * UI_SCALE)
+        width = int(300 * UI_SCALE)
+        height = int(200 * UI_SCALE)
         surface = pygame.Surface((width, height), pygame.SRCALPHA)
         
         # 渐变背景
@@ -489,19 +498,20 @@ class BattleBaseScene(BaseScene):
         """创建血量条"""
         bar_width = int(HEALTH_BAR_WIDTH * UI_SCALE)
         bar_height = int(HEALTH_BAR_HEIGHT * UI_SCALE)
-        margin_x = int(30 * UI_SCALE)
         
         # 玩家血量条
+        player_x = int(WINDOW_WIDTH * HEALTH_X_RATIO)
         player_y = int(WINDOW_HEIGHT * PLAYER_HEALTH_Y_RATIO)
         self.player_health_bar = HealthBar(
-            margin_x, player_y, bar_width, bar_height,
+            player_x, player_y, bar_width, bar_height,
             self.player_max_hp, self.player_current_hp, is_player=True
         )
         
         # 敌人血量条
+        enemy_x = int(WINDOW_WIDTH * HEALTH_X_RATIO)
         enemy_y = int(WINDOW_HEIGHT * ENEMY_HEALTH_Y_RATIO)
         self.enemy_health_bar = HealthBar(
-            margin_x, enemy_y, bar_width, bar_height,
+            enemy_x, enemy_y, bar_width, bar_height,
             self.enemy_max_hp, self.enemy_current_hp, is_player=False
         )
 
@@ -596,7 +606,7 @@ class BattleBaseScene(BaseScene):
         """绘制场景标签"""
         # 敌人区域标签
         enemy_label = self.title_font.render("敌方区域", True, (255, 100, 100))
-        enemy_rect = enemy_label.get_rect(center=(WINDOW_WIDTH // 2, int(WINDOW_HEIGHT * 0.15)))
+        enemy_rect = enemy_label.get_rect(center=(WINDOW_WIDTH // 2, int(WINDOW_HEIGHT * 0.2)))
         
         # 半透明背景
         label_bg = pygame.Surface((enemy_rect.width + 20, enemy_rect.height + 10), pygame.SRCALPHA)
@@ -606,7 +616,7 @@ class BattleBaseScene(BaseScene):
         
         # 玩家区域标签
         player_label = self.title_font.render("我方区域", True, (100, 255, 100))
-        player_rect = player_label.get_rect(center=(WINDOW_WIDTH // 2, int(WINDOW_HEIGHT * 0.73)))
+        player_rect = player_label.get_rect(center=(WINDOW_WIDTH // 2, int(WINDOW_HEIGHT * 0.8)))
         
         label_bg = pygame.Surface((player_rect.width + 20, player_rect.height + 10), pygame.SRCALPHA)
         label_bg.fill((0, 0, 0, 120))
@@ -673,21 +683,45 @@ class BattleBaseScene(BaseScene):
         self.screen.blit(discard_label, (discard_x, discard_y))
         self.enemy_discard_slot.draw(self.screen)
 
+    def start_turn_indicator_animation(self):
+        self.turn_indicator_anim_progress = 0.0
+        self.turn_indicator_animating = True
+
+    def update_turn_indicator_animation(self, dt):
+        if not self.turn_indicator_animating:
+            self.turn_indicator_scale = 1.0
+            self.turn_indicator_flash_alpha = 0
+            return
+        self.turn_indicator_anim_progress += dt
+        t = min(1.0, self.turn_indicator_anim_progress / max(0.001, self.turn_indicator_anim_duration))
+        self.turn_indicator_scale = 1.0 + 0.25 * math.sin(math.pi * t)
+        self.turn_indicator_flash_alpha = int(120 * (1 - t))
+        if self.turn_indicator_anim_progress >= self.turn_indicator_anim_duration:
+            self.turn_indicator_animating = False
+            self.turn_indicator_scale = 1.0
+            self.turn_indicator_flash_alpha = 0
+
     def draw_turn_indicator(self):
         """绘制回合指示器"""
         self.screen.blit(self.turn_bg, self.turn_bg_rect) # 背景图
+        if self.turn_indicator_flash_alpha > 0:
+            flash_surface = pygame.Surface(self.turn_bg.get_size(), pygame.SRCALPHA)
+            flash_surface.fill((255, 255, 255, self.turn_indicator_flash_alpha))
+            self.screen.blit(flash_surface, self.turn_bg_rect.topleft)
         
         # 回合数
-        turn_font = get_font(max(32, int(48 * UI_SCALE)))
+        turn_font = get_font(int(48 * UI_SCALE))
         turn_text = turn_font.render(f"回合 {self.turn_number}", True, (255, 215, 0))
+        top_padding = int(18 * UI_SCALE)
+        content_gap = int(10 * UI_SCALE)
         turn_rect = turn_text.get_rect(
             centerx=self.turn_bg_rect.centerx,
-            top=self.turn_bg_rect.top + int(20 * UI_SCALE)
+            top=self.turn_bg_rect.top + top_padding
         )
         self.screen.blit(turn_text, turn_rect)
         
         # 当前玩家
-        player_font = get_font(max(20, int(28 * UI_SCALE)))
+        player_font = get_font(int(28 * UI_SCALE))
         
         if self.current_turn == "player1":
             player_text = "玩家回合"
@@ -697,9 +731,16 @@ class BattleBaseScene(BaseScene):
             color = (255, 100, 100)
         
         player_surface = player_font.render(player_text, True, color)
+        scale_factor = self.turn_indicator_scale
+        if scale_factor != 1.0:
+            new_size = (
+                max(1, int(player_surface.get_width() * scale_factor)),
+                max(1, int(player_surface.get_height() * scale_factor))
+            )
+            player_surface = pygame.transform.smoothscale(player_surface, new_size)
         player_rect = player_surface.get_rect(
             centerx=self.turn_bg_rect.centerx,
-            centery=self.turn_bg_rect.centery
+            top=turn_rect.bottom + content_gap
         )
         self.screen.blit(player_surface, player_rect)
         
@@ -715,7 +756,7 @@ class BattleBaseScene(BaseScene):
         status_surface = status_font.render(status_text, True, status_color)
         status_rect = status_surface.get_rect(
             centerx=self.turn_bg_rect.centerx,
-            bottom=self.turn_bg_rect.bottom - int(15 * UI_SCALE)
+            top=player_rect.bottom + content_gap
         )
         self.screen.blit(status_surface, status_rect)
 
@@ -741,7 +782,7 @@ class BattleBaseScene(BaseScene):
         self.screen.blit(result_surface, result_rect)
         
         # 提示文字
-        hint_font = get_font(max(20, int(28 * UI_SCALE)))
+        hint_font = get_font(int(28 * UI_SCALE))
         hint_text = "按 ESC 返回主菜单"
         hint_surface = hint_font.render(hint_text, True, (200, 200, 200))
         hint_rect = hint_surface.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 + 50))

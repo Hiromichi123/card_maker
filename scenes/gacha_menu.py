@@ -11,7 +11,7 @@ from ui.tooltip import CardTooltip
 from ui.system_ui import CurrencyLevelUI, DEFAULT_GOLD_ICON, DEFAULT_CRYSTAL_ICON
 from utils.card_database import CardDatabase
 from utils.scene_payload import set_payload
-from game.gacha_probabilities import GACHA_POOLS # 卡池配置
+from game.gacha_probabilities import GACHA_POOLS, get_prob_table # 卡池配置
 
 # 仪表盘属性
 DASHBOARD_ALPHA = 50
@@ -404,17 +404,30 @@ class GachaMenuScene(BaseScene):
         self._launch_gacha_scene(pool, draw_count)
 
     def _launch_gacha_scene(self, pool, draw_count: int):
-        payload = {
+        payload = self._build_pool_payload(pool, draw_count)
+        set_payload("gacha", payload)
+        self.switch_to("gacha")
+
+    def _build_pool_payload(self, pool, draw_count: int) -> dict:
+        prob_source = pool.get("prob_table")
+        if isinstance(prob_source, dict):
+            prob_table = prob_source
+        else:
+            prob_table = get_prob_table(prob_source)
+
+        normalized_draw = 10 if draw_count >= 10 else 1
+        auto_delay = 0.65 if normalized_draw == 1 else 0.85
+
+        return {
+            "pool_id": pool.get("id") or f"pool_{self.selected_pool_index}",
             "pool_name": pool.get("name"),
             "pool_description": pool.get("description"),
             "prob_label": pool.get("prob_label"),
-            "prob_table": pool.get("prob_table"),
+            "prob_table": prob_table,
             "bg_type": pool.get("bg_type"),
-            "draw_count": 10 if draw_count >= 10 else 1,
-            "auto_delay": 0.65 if draw_count == 1 else 0.85,
+            "draw_count": normalized_draw,
+            "auto_delay": auto_delay,
         }
-        set_payload("gacha", payload)
-        self.switch_to("gacha")
 
     def _set_currency_notice(self, text: str):
         self.currency_notice = text

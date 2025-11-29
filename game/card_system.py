@@ -293,7 +293,7 @@ class CardSystem:
     def draw_one_card(self, prob=CARD_PROBABILITIES):
         """单抽"""
         card_pool = self.get_card_pool(prob=prob)
-        level_dir, card_path = self.draw_single_card(card_pool)
+        level_dir, card_path = self.draw_single_card(card_pool, prob=prob)
         position = ((WINDOW_WIDTH - CARD_WIDTH) // 2, 
                     (WINDOW_HEIGHT - CARD_HEIGHT) // 2)
         card = Card(card_path, level_dir, position, 0)
