@@ -4,21 +4,89 @@ import math
 import os
 import random
 from collections import deque
+from datetime import datetime
 import pygame
 from config import *
 from scenes.base.base_scene import BaseScene
 from ui.background import ParallaxBackground
 from ui.menu_button import MenuButton
 from ui.poster_detail_panel import PosterDetailPanel
-
+from utils.card_database import get_card_database
+from utils.scene_payload import set_payload
 
 class ActivityMazeScene(BaseScene):
     SAVE_PATH = os.path.join("data", "activity", "floor1.json")
+    TEMP_DECK_PATH = os.path.join("data", "activity", "temp_deck.json")
     MAZE_VERSION = 10
     NODE_COUNT_RANGE = (50, 60)
     BOSS_MIN_DISTANCE = 5
     BASE_TILE_SIZE = 225 * UI_SCALE
     BASE_TILE_GAP = 150 * UI_SCALE
+    FLOOR_KEY = "floor1"
+    FLOOR_SETTINGS = {
+        "floor1": {
+            "strength_base": 1.0,
+            "enemy_base": 1.0,
+            "deck_size": 12,
+        }
+    }
+    ENEMY_TYPE_MULTIPLIERS = {
+        "normal": 1.0,
+        "elite": 1.5,
+        "boss": 2.0,
+    }
+    RANDOM_STRENGTH_RANGE = (0.9, 1.2)
+    EXPLORED_FACTOR_GAIN = 0.6
+    TEMP_DECK_SIZE_LIMITS = (6, 16)
+    RARITY_BUCKETS = {
+        "low": ["D", "C", "C+"],
+        "mid": ["B", "B+", "A", "A+"],
+        "high": ["S", "S+", "SS", "SS+", "SSS"],
+    }
+    SHOP_CARD_COUNT = 3
+    SHOP_TRAIT_COUNT_RANGE = (2, 3)
+    SHOP_RARITY_WEIGHTS = {
+        "SSS": 0.28,
+        "SS+": 0.35,
+        "SS": 0.45,
+        "S+": 0.6,
+        "S": 0.75,
+        "A+": 0.9,
+        "A": 1.0,
+        "B+": 1.05,
+        "B": 1.1,
+        "C+": 1.18,
+        "C": 1.22,
+        "D": 1.25,
+    }
+    SHOP_TRAITS_POOL = [
+        {"name": "锋刃研磨", "desc": "下一场战斗攻击卡牌获得 +1点 攻击。", "rarity": "A"},
+        {"name": "防御矩阵", "desc": "战斗开始时获得 10 点护盾。", "rarity": "A"},
+        {"name": "充能药剂", "desc": "本层第一次卡牌立即刷新冷却。", "rarity": "S"},
+        {"name": "携行补给", "desc": "随机两张攻击卡的费用 -1。", "rarity": "B"},
+        {"name": "侦查无人机", "desc": "下一场战斗敌方卡牌信息可见。", "rarity": "B"},
+        {"name": "治疗滴剂", "desc": "恢复 20% 最大生命。", "rarity": "A"},
+        {"name": "速攻程序", "desc": "本场战斗的第 1 张牌额外行动一次。", "rarity": "S"},
+    ]
+    EVENT_CARD_RARITY = "#elna"
+    SHOP_EVENT_LABEL = "活动限定"
+    SHOP_REGULAR_LABEL = "迷宫补给"
+    SHOP_PRICE_RULES = {
+        "SSS": {"currency": "crystal", "amount": 551},
+        "SS+": {"currency": "crystal", "amount": 430},
+        "SS": {"currency": "crystal", "amount": 324},
+        "S+": {"currency": "crystal", "amount": 200},
+        "S": {"currency": "crystal", "amount": 120},
+        "A+": {"currency": "gold", "amount": 5200},
+        "A": {"currency": "gold", "amount": 4153},
+        "B+": {"currency": "gold", "amount": 3100},
+        "B": {"currency": "gold", "amount": 2589},
+        "C+": {"currency": "gold", "amount": 1900},
+        "C": {"currency": "gold", "amount": 1354},
+        "D": {"currency": "gold", "amount": 690},
+    }
+    EVENT_PRICE_MULTIPLIER = 1.2
+    REGULAR_DISCOUNT = 0.85
 
     def __init__(self, screen):
         super().__init__(screen)
@@ -26,6 +94,8 @@ class ActivityMazeScene(BaseScene):
         self.title_font = get_font(int(70 * UI_SCALE))
         self.info_font = get_font(int(28 * UI_SCALE))
         self.small_font = get_font(int(22 * UI_SCALE))
+        self.floor_key = self.FLOOR_KEY
+        self.temp_deck_path = self.TEMP_DECK_PATH
 
         self.node_type_styles = {
             "entry": {"color": (170, 255, 200), "alpha": 230, "label": "入口"},
@@ -48,29 +118,35 @@ class ActivityMazeScene(BaseScene):
         self.player_orb_phase = 0.0
         self.hovered_node_id = None
         self.selected_target_id = None
+        self.last_strength_snapshot = None
 
         btn_width = int(260 * UI_SCALE)
         btn_height = int(56 * UI_SCALE)
         self.back_button = MenuButton(
-            int(WINDOW_WIDTH * 0.82),
-            int(WINDOW_HEIGHT * 0.9),
-            btn_width,
-            btn_height,
+            int(WINDOW_WIDTH * 0.82), int(WINDOW_HEIGHT * 0.9),
+            btn_width, btn_height,
             "返回活动大厅",
-            color=(120, 200, 255),
-            hover_color=(160, 230, 255),
-            text_color=(225, 225, 225),
+            color=(120, 200, 255), hover_color=(160, 230, 255), text_color=(225, 225, 225),
             on_click=lambda: self.switch_to("activity_scene")
+        )
+        self.reset_button = MenuButton(
+            int(WINDOW_WIDTH * 0.08), int(WINDOW_HEIGHT * 0.9),
+            btn_width, btn_height,
+            "清空探索记录",
+            color=(120, 200, 255), hover_color=(160, 230, 255), text_color=(225, 225, 225),
+            on_click=self._reset_progress
         )
 
         panel_rect = pygame.Rect(
             int(WINDOW_WIDTH * 0.72),
-            int(WINDOW_HEIGHT * 0.16),
+            int(WINDOW_HEIGHT * 0.1),
             int(WINDOW_WIDTH * 0.24),
-            int(WINDOW_HEIGHT * 0.7),
+            int(WINDOW_HEIGHT * 0.8),
         )
         self.detail_panel = PosterDetailPanel(panel_rect)
         self.detail_panel.hide()
+        self.hovered_node_id = None
+        self.last_strength_snapshot = None
 
         self.is_moving = False
         self.move_start_id = None
@@ -100,10 +176,12 @@ class ActivityMazeScene(BaseScene):
             self._handle_node_click(event.pos)
 
         self.back_button.handle_event(event)
+        self.reset_button.handle_event(event)
 
     def update(self, dt):
         self.background.update(dt)
         self.back_button.update(dt)
+        self.reset_button.update(dt)
         self._update_move_animation(dt)
         self.player_orb_phase += dt * 2.5
 
@@ -115,6 +193,7 @@ class ActivityMazeScene(BaseScene):
         self._draw_player_orb()
         self.detail_panel.draw(self.screen)
         self._draw_legend()
+        self.reset_button.draw(self.screen)
         self.back_button.draw(self.screen)
         self._draw_hint()
 
@@ -123,6 +202,7 @@ class ActivityMazeScene(BaseScene):
     # ------------------------------------------------------------------
     def _ensure_data_directory(self):
         os.makedirs(os.path.dirname(self.SAVE_PATH), exist_ok=True)
+        os.makedirs(os.path.dirname(self.TEMP_DECK_PATH), exist_ok=True)
 
     def _load_or_create_maze(self, force_reload=False):
         if not force_reload and self.nodes:
@@ -424,6 +504,8 @@ class ActivityMazeScene(BaseScene):
                 "neighbors": list(raw.get("neighbors", [])),
                 "type": node_type,
             }
+            if raw.get("shop_state"):
+                node["shop_state"] = raw.get("shop_state")
             if node_id == self.entry_id:
                 node["explored"] = True
             self._apply_type_style(node)
@@ -587,6 +669,11 @@ class ActivityMazeScene(BaseScene):
             "tags": tags,
             "rewards": [self._node_reward_hint(node_type)],
         }
+        if self._is_battle_node(node_type):
+            ctx = self._build_strength_context(node_type, use_average_random=True)
+            entry["description"] += f" 预估强度系数：{ctx['total']:.2f}。"
+            estimated_size = self._calc_deck_size(ctx["total"])
+            entry.setdefault("rewards", []).append(f"敌方牌组约 {estimated_size} 张")
         return entry
 
     def _node_reward_hint(self, node_type):
@@ -598,6 +685,263 @@ class ActivityMazeScene(BaseScene):
             "supply": "补给资源",
         }
         return mapping.get(node_type, "未知")
+
+    def _is_battle_node(self, node_type):
+        return node_type in ("normal", "elite", "boss")
+
+    def _handle_node_arrival(self, node):
+        if not node:
+            return
+        node_type = node.get("type", "normal")
+        if self._is_battle_node(node_type):
+            deck_payload = self._generate_temp_enemy_deck(node)
+            self._write_temp_deck(deck_payload)
+            stage_id = f"{self.floor_key}-{node.get('id')}"
+            battle_payload = {
+                "stage_id": stage_id,
+                "stage_name": node.get("event", "迷宫战斗"),
+                "enemy_deck": self.temp_deck_path,
+                "background": None,
+                "node_type": node_type,
+                "floor": self.floor_key,
+            }
+            set_payload("simple_battle", battle_payload)
+            self.switch_to("simple_battle")
+            return
+        if node_type == "supply":
+            shop_payload = self._build_floor_shop_payload(node)
+            set_payload("floor_shop", shop_payload)
+            self.switch_to("floor_shop")
+
+    def _generate_temp_enemy_deck(self, node):
+        node_type = node.get("type", "normal")
+        ctx = self._build_strength_context(node_type)
+        self.last_strength_snapshot = ctx
+        deck_size = self._calc_deck_size(ctx["total"])
+        cards = self._sample_enemy_cards(deck_size, ctx["total"])
+        payload = {
+            "deck": cards,
+            "meta": {
+                "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "node_id": node.get("id"),
+                "node_type": node_type,
+                "strength": ctx,
+                "deck_size": deck_size,
+            }
+        }
+        return payload
+
+    def _write_temp_deck(self, payload):
+        try:
+            with open(self.temp_deck_path, "w", encoding="utf-8") as fp:
+                json.dump(payload, fp, ensure_ascii=False, indent=2)
+            print(f"[ActivityMazeScene] 已生成临时卡组 -> {self.temp_deck_path}")
+        except OSError as err:
+            print(f"[ActivityMazeScene] 无法写入临时卡组: {err}")
+
+    def _build_floor_shop_payload(self, node):
+        state = node.get("shop_state")
+        if not state or not state.get("cards"):
+            state = self._generate_shop_state(node)
+            node["shop_state"] = state
+            self._persist_state()
+        return {
+            "floor": self.floor_key,
+            "node_id": node.get("id"),
+            "node_type": node.get("type"),
+            "node_event": node.get("event"),
+            "traits": state.get("traits", []),
+            "cards": state.get("cards", []),
+            "generated_at": state.get("generated_at"),
+            "shop_state": state,
+            "save_path": self.SAVE_PATH,
+        }
+
+    def _generate_shop_state(self, node):
+        generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        traits = self._roll_shop_traits()
+        cards = self._build_shop_inventory()
+        return {
+            "node_id": node.get("id"),
+            "generated_at": generated_at,
+            "traits": traits,
+            "cards": cards,
+        }
+
+    def _build_shop_inventory(self):
+        inventory = []
+        event_card = self._pick_event_card()
+        if event_card:
+            inventory.append(self._create_shop_entry(event_card, self.SHOP_EVENT_LABEL, source="event"))
+        regular_needed = max(0, self.SHOP_CARD_COUNT - len(inventory))
+        for card in self._roll_shop_cards(count=regular_needed):
+            inventory.append(self._create_shop_entry(card, self.SHOP_REGULAR_LABEL, source="regular"))
+        for idx, entry in enumerate(inventory):
+            entry["slot"] = idx
+        return inventory
+
+    def _create_shop_entry(self, card_info, label, source="regular"):
+        return {
+            "slot": -1,
+            "card": card_info,
+            "label": label,
+            "quantity": 1,
+            "sold": False,
+            "source": source,
+            "price": self._calc_shop_price(card_info, source),
+        }
+
+    def _calc_shop_price(self, card_info, source):
+        rarity = (card_info or {}).get("rarity", "A")
+        base_rule = self.SHOP_PRICE_RULES.get(rarity, {"currency": "gold", "amount": 1200})
+        price = {
+            "currency": base_rule.get("currency", "gold"),
+            "amount": int(base_rule.get("amount", 0))
+        }
+        if source == "regular":
+            price["amount"] = max(50, int(price["amount"] * self.REGULAR_DISCOUNT))
+        elif source == "event":
+            price["currency"] = "crystal"
+            price["amount"] = max(75, int(price["amount"] * self.EVENT_PRICE_MULTIPLIER))
+        return price
+
+    def _calc_deck_size(self, strength_value):
+        floor_cfg = self.FLOOR_SETTINGS.get(self.floor_key, self.FLOOR_SETTINGS[self.FLOOR_KEY])
+        base_size = floor_cfg.get("deck_size", 8)
+        scaled = base_size * (0.8 + min(strength_value, 3.0) * 0.35)
+        deck_size = int(round(scaled))
+        min_size, max_size = self.TEMP_DECK_SIZE_LIMITS
+        return max(min_size, min(max_size, deck_size))
+
+    def _build_strength_context(self, node_type, use_average_random=False):
+        floor_cfg = self.FLOOR_SETTINGS.get(self.floor_key, self.FLOOR_SETTINGS[self.FLOOR_KEY])
+        floor_base = floor_cfg.get("strength_base", 1.0)
+        enemy_base = floor_cfg.get("enemy_base", 1.0)
+        explored_ratio = self._get_explored_ratio()
+        dynamic_factor = 1.0 + explored_ratio * self.EXPLORED_FACTOR_GAIN
+        if use_average_random:
+            random_factor = sum(self.RANDOM_STRENGTH_RANGE) / 2
+        else:
+            random_factor = random.uniform(*self.RANDOM_STRENGTH_RANGE)
+        type_multiplier = self.ENEMY_TYPE_MULTIPLIERS.get(node_type, 1.0)
+        total = floor_base * enemy_base * dynamic_factor * type_multiplier * random_factor
+        return {
+            "total": total,
+            "floor_base": floor_base,
+            "enemy_base": enemy_base,
+            "dynamic_factor": dynamic_factor,
+            "type_multiplier": type_multiplier,
+            "random_factor": random_factor,
+            "explored_ratio": explored_ratio,
+        }
+
+    def _get_explored_ratio(self):
+        if not self.nodes:
+            return 0.0
+        explored = sum(1 for node in self.nodes if node.get("explored"))
+        return explored / max(1, len(self.nodes))
+
+    def _sample_enemy_cards(self, deck_size, strength_value):
+        db = get_card_database()
+        all_cards = db.get_all_cards()
+        if not all_cards:
+            return [self._build_fallback_card_entry(strength_value, idx) for idx in range(deck_size)]
+        grouped = {rarity: list(db.get_cards_by_rarity(rarity)) for rarity in {card.rarity for card in all_cards}}
+        cards = []
+        high_bias = max(0.05, min(0.75, 0.25 + (strength_value - 1.0) * 0.2))
+        mid_bias = max(0.2, min(0.9, 0.4 + (strength_value - 0.8) * 0.2))
+        for _ in range(deck_size):
+            roll = random.random()
+            if roll < high_bias and self._rarity_pool_available(grouped, self.RARITY_BUCKETS["high"]):
+                rarity = self._pick_rarity(grouped, self.RARITY_BUCKETS["high"])
+            elif roll < mid_bias and self._rarity_pool_available(grouped, self.RARITY_BUCKETS["mid"]):
+                rarity = self._pick_rarity(grouped, self.RARITY_BUCKETS["mid"])
+            else:
+                rarity = self._pick_rarity(grouped, self.RARITY_BUCKETS["low"], fallback=True)
+            pool = grouped.get(rarity) or all_cards
+            card = random.choice(pool)
+            path = (card.image_path or "").replace("/", os.sep)
+            cards.append({"path": path, "rarity": card.rarity})
+        return cards
+
+    def _rarity_pool_available(self, grouped, rarities):
+        for rarity in rarities:
+            if grouped.get(rarity):
+                return True
+        return False
+
+    def _pick_rarity(self, grouped, rarities, fallback=False):
+        available = [r for r in rarities if grouped.get(r)]
+        if available:
+            return random.choice(available)
+        if fallback:
+            all_available = [r for r, cards in grouped.items() if cards]
+            if all_available:
+                return random.choice(all_available)
+        return random.choice(rarities)
+
+    def _build_fallback_card_entry(self, strength_value, idx):
+        atk = int(40 + strength_value * 30 + random.randint(-5, 10))
+        hp = int(120 + strength_value * 60 + random.randint(-10, 15))
+        cd = max(1, int(3 - min(1.5, strength_value * 0.5)))
+        return {
+            "path": f"generated/temp_enemy_card_{idx}.png",
+            "rarity": "C",
+            "atk": atk,
+            "hp": hp,
+            "cd": cd,
+            "name": f"临时敌人 {idx + 1}",
+        }
+
+    def _roll_shop_traits(self):
+        if not self.SHOP_TRAITS_POOL:
+            return []
+        choices = self.SHOP_TRAITS_POOL[:]
+        random.shuffle(choices)
+        min_count = min(len(choices), self.SHOP_TRAIT_COUNT_RANGE[0])
+        max_count = min(len(choices), self.SHOP_TRAIT_COUNT_RANGE[1])
+        if min_count > max_count:
+            min_count = max_count
+        count = random.randint(min_count, max_count) if max_count else 0
+        return [dict(trait) for trait in choices[:count]]
+
+    def _roll_shop_cards(self, count=None):
+        desired = count or self.SHOP_CARD_COUNT
+        db = get_card_database()
+        pool = [card for card in db.get_all_cards() if not getattr(card, "is_event_card", False)]
+        if not pool:
+            return []
+        selected = []
+        available = pool[:]
+        for _ in range(desired):
+            if not available:
+                available = pool[:]
+            weights = [self.SHOP_RARITY_WEIGHTS.get(card.rarity, 1.0) for card in available]
+            choice = random.choices(available, weights=weights, k=1)[0]
+            selected.append(self._serialize_card_for_shop(choice))
+            if choice in available:
+                available.remove(choice)
+        return selected
+
+    def _serialize_card_for_shop(self, card):
+        return {
+            "card_id": card.card_id,
+            "name": card.name,
+            "rarity": card.rarity,
+            "atk": card.atk,
+            "hp": card.hp,
+            "cd": card.cd,
+            "traits": card.traits,
+            "image_path": card.image_path,
+        }
+
+    def _pick_event_card(self):
+        db = get_card_database()
+        event_cards = db.get_cards_by_rarity(self.EVENT_CARD_RARITY)
+        if not event_cards:
+            return None
+        card = random.choice(event_cards)
+        return self._serialize_card_for_shop(card)
 
     def _start_move_animation(self, target_id):
         if self.player_node_id is None or self.is_moving:
@@ -650,25 +994,30 @@ class ActivityMazeScene(BaseScene):
             node["explored"] = True
         self._persist_state()
         self._focus_on_player()
+        self._handle_node_arrival(node)
 
     def _persist_state(self):
+        nodes_payload = []
+        for node in self.nodes:
+            entry = {
+                "id": node["id"],
+                "grid": list(node["grid"]),
+                "color": list(node["color"]),
+                "alpha": node["alpha"],
+                "event": node["event"],
+                "explored": node.get("explored", False),
+                "neighbors": node["neighbors"],
+                "type": node.get("type", "normal"),
+            }
+            if node.get("shop_state"):
+                entry["shop_state"] = node["shop_state"]
+            nodes_payload.append(entry)
+
         data = {
             "version": self.MAZE_VERSION,
             "entry_id": self.entry_id,
             "player_node": self.player_node_id,
-            "nodes": [
-                {
-                    "id": node["id"],
-                    "grid": list(node["grid"]),
-                    "color": list(node["color"]),
-                    "alpha": node["alpha"],
-                    "event": node["event"],
-                    "explored": node.get("explored", False),
-                    "neighbors": node["neighbors"],
-                    "type": node.get("type", "normal"),
-                }
-                for node in self.nodes
-            ],
+            "nodes": nodes_payload,
         }
         self._save_maze_data(data)
 
@@ -828,3 +1177,26 @@ class ActivityMazeScene(BaseScene):
     def get_hovered_card(self, mouse_pos):
         """迷宫场景没有卡牌提示"""
         return None
+
+    def _reset_progress(self):
+        self.is_moving = False
+        self.move_start_id = None
+        self.move_target_id = None
+        self.move_progress = 0.0
+        self.selected_target_id = None
+        self.detail_panel.hide()
+        try:
+            if os.path.exists(self.SAVE_PATH):
+                os.remove(self.SAVE_PATH)
+        except OSError as err:
+            print(f"[ActivityMazeScene] 无法删除存档: {err}")
+        try:
+            if os.path.exists(self.temp_deck_path):
+                os.remove(self.temp_deck_path)
+        except OSError as err:
+            print(f"[ActivityMazeScene] 无法删除临时卡组: {err}")
+        self.nodes = []
+        self.nodes_by_id = {}
+        self.connections = []
+        self.player_node_id = None
+        self._load_or_create_maze(force_reload=True)

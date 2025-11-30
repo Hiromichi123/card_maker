@@ -38,7 +38,7 @@ class ActivityShopScene(BaseScene):
         self.notice_timer = 0.0
 
     def _create_buttons(self):
-        base_x = int(WINDOW_WIDTH * 0.76)
+        base_x = int(WINDOW_WIDTH * 0.8)
         base_y = int(WINDOW_HEIGHT * 0.26)
         width = int(300 * UI_SCALE)
         height = int(56 * UI_SCALE)
@@ -55,12 +55,9 @@ class ActivityShopScene(BaseScene):
             btn = MenuButton(
                 base_x - int(12 * UI_SCALE) * idx,
                 base_y + spacing * idx,
-                width,
-                height,
+                width, height,
                 label,
-                color=color,
-                hover_color=hover,
-                text_color=(25, 25, 25),
+                color=color, hover_color=hover, text_color=(25, 25, 25),
                 on_click=action
             )
             buttons.append(btn)

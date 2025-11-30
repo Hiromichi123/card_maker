@@ -9,26 +9,33 @@ from collections import defaultdict
 class CardData:
     RARITY_TO_LEVEL = {
         "SSS": 0,
+        "SS+": 0.5,
         "SS": 1,
+        "S+": 1.5,
         "S": 2,
+        "A+": 2.5,
         "A": 3,
+        "B+": 3.5,
         "B": 4,
+        "C+": 4.5,
         "C": 5,
-        "D": 6
+        "D": 6,
+        "#elna": 0,
     }
     
-    def __init__(self, card_id, name, rarity, atk=0, hp=0, cd=0, traits=None, description="", image_path=""):
+    def __init__(self, card_id, name, rarity, atk=0, hp=0, cd=0, traits=None, description="", image_path="", level_override=None):
         self.card_id = card_id
         self.name = name
         self.rarity = rarity
-        self.level = self.RARITY_TO_LEVEL.get(rarity, 3)  # 根据稀有度计算等级
+        self.level = level_override if level_override is not None else self.RARITY_TO_LEVEL.get(rarity, 3)
         self.atk = atk
         self.hp = hp
         self.max_hp = hp  # 记录最大生命值（用于技能系统判定）
         self.cd = cd
         self.traits = traits if traits else []
         self.description = description
-        self.image_path = image_path  
+        self.image_path = image_path
+        self.is_event_card = rarity.startswith("#")
     
     def to_dict(self):
         """转换为字典（用于保存）"""
@@ -63,7 +70,8 @@ class CardData:
             cd=data.get("cd", 0),
             traits=data.get("traits", []),
             description=data.get("description", ""),
-            image_path=image_path
+            image_path=image_path,
+            level_override=data.get("level"),
         )
     
     def __str__(self):
@@ -78,7 +86,11 @@ class CardData:
 class CardDatabase:
     """卡牌数据库"""
     BASE_PATH = "assets/outputs"
-    RARITY_DIRS = ["SSS", "SS", "S", "A", "B", "C", "D"]
+    RARITY_DIRS = [
+        "SSS", "SS+", "SS", "S+", "S",
+        "A+", "A", "B+", "B", "C+", "C", "D"
+    ]
+    EVENT_DIRS = ["#elna"]
     
     def __init__(self):
         self.cards = {}  # {card_id: CardData}
@@ -90,7 +102,7 @@ class CardDatabase:
         """加载所有稀有度目录下的卡牌"""
         total_loaded = 0
         
-        for rarity in self.RARITY_DIRS:
+        for rarity in self.RARITY_DIRS + self.EVENT_DIRS:
             count = self.load_rarity_cards(rarity)
             total_loaded += count
         

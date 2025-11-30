@@ -12,10 +12,15 @@ from utils.card_database import CardDatabase
 
 CARD_PRICE_RULES = {
     "SSS": {"currency": "crystal", "amount": 551},
+    "SS+": {"currency": "crystal", "amount": 430},
     "SS": {"currency": "crystal", "amount": 324},
+    "S+": {"currency": "crystal", "amount": 200},
     "S": {"currency": "crystal", "amount": 120},
+    "A+": {"currency": "gold", "amount": 5200},
     "A": {"currency": "gold", "amount": 4153},
+    "B+": {"currency": "gold", "amount": 3100},
     "B": {"currency": "gold", "amount": 2589},
+    "C+": {"currency": "gold", "amount": 1900},
     "C": {"currency": "gold", "amount": 1354},
     "D": {"currency": "gold", "amount": 690}
 }
@@ -101,7 +106,7 @@ class ShopScene(BaseScene):
         return {
             "top": {
                 "label": "神话",
-                "rarities": ("SSS", "SS"),
+                "rarities": ("SSS", "SS+", "SS"),
                 "count_range": (1, 2),
                 "card_size": (int(200 * UI_SCALE), int(300 * UI_SCALE)),
                 "height": int(400 * UI_SCALE),
@@ -109,7 +114,7 @@ class ShopScene(BaseScene):
             },
             "middle": {
                 "label": "传承",
-                "rarities": ("S", "A"),
+                "rarities": ("S+", "S", "A+", "A"),
                 "count_range": (3, 4),
                 "card_size": (int(200 * UI_SCALE), int(300 * UI_SCALE)),
                 "height": int(400 * UI_SCALE),
@@ -117,7 +122,7 @@ class ShopScene(BaseScene):
             },
             "bottom": {
                 "label": "探索",
-                "rarities": ("B", "C", "D"),
+                "rarities": ("B+", "B", "C+", "C", "D"),
                 "count_range": (5, 5),
                 "card_size": (int(160 * UI_SCALE), int(240 * UI_SCALE)),
                 "height": int(380 * UI_SCALE),

@@ -7,14 +7,18 @@ from utils.card_database import get_card_database, CardData
 
 # 常驻卡池概率
 CARD_PROBABILITIES = {
-    "SSS": 0.5,  # SSS - 0.5%
-    "SS": 1.5,   # SS - 1.5%
-    "S": 2.5,    # S - 2.5%
-    "A": 8.5,    # A - 8.5%
-    #=====以上13%，以下87%=====
-    "B": 17,     # B - 17%
-    "C": 30,     # C - 30%
-    "D": 40      # D - 40%
+    "SSS": 0.5,
+    "SS+": 0.8,
+    "SS": 0.7,
+    "S+": 1.2,
+    "S": 1.3,
+    "A+": 3.0,
+    "A": 5.5,
+    "B+": 7.0,
+    "B": 10.0,
+    "C+": 12.0,
+    "C": 18.0,
+    "D": 40.0
 }
 
 # 抽卡参数
@@ -53,7 +57,7 @@ class Card:
             self.card_data = CardData(
                 card_id=f"unknown_{index}",
                 name="未知卡牌",
-                rarity=6,
+                rarity=rarity,
                 atk=0,
                 hp=0,
                 cd=0,

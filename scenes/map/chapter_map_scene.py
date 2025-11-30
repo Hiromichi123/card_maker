@@ -42,10 +42,8 @@ class ChapterMapScene(BaseScene):
         btn_x = int(WINDOW_WIDTH * 0.04)
         btn_y = int(WINDOW_HEIGHT * 0.86)
         self.back_button = Button(
-            btn_x,
-            btn_y,
-            btn_width,
-            btn_height,
+            btn_x, btn_y,
+            btn_width, btn_height,
             "返回上一级",
             color=(90, 90, 90),
             hover_color=(130, 130, 130),

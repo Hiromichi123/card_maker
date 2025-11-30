@@ -8,6 +8,11 @@ from ui.scroll_view import ScrollView
 from utils.inventory import get_inventory
 from config import *
 
+RARITY_SEQUENCE = [
+    "SSS", "SS+", "SS", "S+", "S",
+    "A+", "A", "B+", "B", "C+", "C", "D"
+]
+
 # 卡牌布局参数
 card_width = int(216 * UI_SCALE)
 card_height = int(324 * UI_SCALE)
@@ -16,8 +21,7 @@ card_spacing = int(30 * UI_SCALE)
 
 """图鉴卡牌显示类"""
 class CollectionCard:
-    # 图片缓存 避免重复加载和缩放
-    _image_cache = {}  # key: (path, width, height), value: scaled surface
+    _image_cache = {}
     
     def __init__(self, card_data, x, y, width, height):
         self.data = card_data
@@ -112,7 +116,7 @@ class CollectionCard:
         pygame.draw.circle(surface, (255, 215, 0), center, badge_size // 2, 2)
         
         # 数量文字
-        font = get_font(max(14, int(18 * UI_SCALE)))
+        font = get_font(int(18 * UI_SCALE))
         count_text = f"x{self.data['count']}"
         text = font.render(count_text, True, (255, 255, 255))
         text_rect = text.get_rect(center=center)
@@ -143,7 +147,7 @@ class CollectionScene(BaseScene):
         bg = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
         bg.fill(BACKGROUND_COLOR)
         
-        grid_size = max(20, int(40 * UI_SCALE))
+        grid_size = int(40 * UI_SCALE)
         for x in range(0, WINDOW_WIDTH, grid_size):
             pygame.draw.line(bg, (40, 40, 60), (x, 0), (x, WINDOW_HEIGHT), 1)
         for y in range(0, WINDOW_HEIGHT, grid_size):
@@ -157,7 +161,7 @@ class CollectionScene(BaseScene):
         panel_width = int(WINDOW_WIDTH * 0.25)
         panel_height = int(WINDOW_HEIGHT * 0.6)
         panel_x = int(WINDOW_WIDTH * 0.05)
-        panel_y = int(WINDOW_HEIGHT * 0.2)
+        panel_y = int(WINDOW_HEIGHT * 0.15)
         
         self.stats_panel = Panel(panel_x, panel_y, panel_width, panel_height)
         
@@ -192,7 +196,7 @@ class CollectionScene(BaseScene):
         filter_spacing = int(10 * UI_SCALE)
         
         self.filter_buttons = []
-        filters = ["全部", "SSS", "SS", "S", "A", "B", "C", "D"]
+        filters = ["全部"] + RARITY_SEQUENCE
         
         for i, rarity in enumerate(filters):
             row = i // 2
@@ -226,7 +230,7 @@ class CollectionScene(BaseScene):
             cards_data = self.inventory.get_cards_by_rarity(self.selected_rarity)
         
         # 按稀有度排序
-        rarity_order = {"SSS": 0, "SS": 1, "S": 2, "A": 3, "B": 4, "C": 5, "D": 6}
+        rarity_order = {rarity: idx for idx, rarity in enumerate(RARITY_SEQUENCE)}
         cards_data.sort(key=lambda x: rarity_order.get(x["rarity"], 99))
         self.card_widgets = [] # 创建卡牌widget
         
@@ -351,7 +355,7 @@ class CollectionScene(BaseScene):
         # 标题
         title = self.info_font.render("收集统计", True, (255, 215, 0))
         self.screen.blit(title, (panel_x, panel_y))
-        panel_y += line_height + int(10 * UI_SCALE)
+        panel_y += line_height + int(40 * UI_SCALE)
         
         # 统计信息
         stats_info = [
@@ -365,16 +369,16 @@ class CollectionScene(BaseScene):
         for info in stats_info:
             text = self.small_font.render(info, True, (200, 200, 200))
             self.screen.blit(text, (panel_x, panel_y))
-            panel_y += int(30 * UI_SCALE)
+            panel_y += int(40 * UI_SCALE)
         
         # 稀有度统计
-        for rarity in ["SSS", "SS", "S", "A", "B", "C", "D"]:
+        for rarity in RARITY_SEQUENCE:
             count = stats['rarity_stats'].get(rarity, 0)
             color = COLORS.get(rarity, (255, 255, 255))
             
             text = self.small_font.render(f"  {rarity}: {count} 张", True, color)
             self.screen.blit(text, (panel_x, panel_y))
-            panel_y += int(28 * UI_SCALE)
+            panel_y += int(40 * UI_SCALE)
     
     def draw_cards(self):
         """绘制卡牌网格"""

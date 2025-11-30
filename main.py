@@ -23,6 +23,7 @@ from scenes.collection import CollectionScene
 from scenes.deck_builder_scene import DeckBuilderScene
 from scenes.activity.activity_scene import ActivityScene
 from scenes.activity.maze_scene import ActivityMazeScene
+from scenes.activity.floor_shop_scene import FloorShopScene
 from scenes.shop_scene import ShopScene
 from scenes.activity.activity_shop_scene import ActivityShopScene
 from scenes.battle_menu import BattleMenuScene
@@ -72,6 +73,7 @@ class SceneManager:
         self._register_scene("deck_builder", DeckBuilderScene, lazy=True)
         self._register_scene("activity_scene", ActivityScene, lazy=True)
         self._register_scene("activity_maze_scene", ActivityMazeScene, lazy=True)
+        self._register_scene("floor_shop", FloorShopScene, lazy=True)
         self._register_scene("shop_scene", ShopScene, lazy=True)
         self._register_scene("activity_shop_scene", ActivityShopScene, lazy=True)
         self._register_scene("battle_menu", BattleMenuScene, lazy=True)

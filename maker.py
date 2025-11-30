@@ -5,7 +5,7 @@ import glob
 import json
 from PIL import Image, ImageDraw, ImageFont
 
-dir = "D"
+dir = "C+"
 cards_path = "D:\\Github\\card_maker\\assets\\cards\\" + dir
 frame_path = "D:\\Github\\card_maker\\assets\\cards\\frame.png"
 json_path = "D:\\Github\\card_maker\\assets\\cards\\" + dir + "\\cards.json"
@@ -18,17 +18,40 @@ MAX_WIDTH = 1920
 MAX_HEIGHT = 1080
 
 # bgr颜色
-def choose_color_by_level(n):
+def choose_color_by_level(level_value):
     colors = {
-        0: (0, 0, 255),    # 红色
-        1: (20, 100, 255), # 橙色
-        2: (0, 215, 255),  # 金色
-        3: (226, 43, 138), # 紫色
-        4: (255, 191, 0),  # 天蓝色
-        5: (0, 255, 0),   # 绿色
-        6: (128, 128, 128) # 灰色
+        0.0: (0, 0, 255),      # 红色
+        0.5: (114, 128, 255),  # 粉色
+        1.0: (20, 100, 255),   # 橙色
+        1.5: (45, 82, 160),    # 赭色
+        2.0: (0, 215, 255),    # 金色
+        2.5: (130, 0, 75),     # 深紫色
+        3.0: (226, 43, 138),   # 紫色
+        3.5: (160, 0, 0),      # 深蓝色
+        4.0: (255, 191, 0),    # 天蓝色
+        4.5: (0, 128, 0),    # 深绿色
+        5.0: (0, 255, 0),      # 绿色
+        6.0: (128, 128, 128),  # 灰色
     }
-    return colors[int(n) % 7]
+
+    try:
+        level = float(level_value)
+    except (TypeError, ValueError):
+        level = 0.0
+
+    if level in colors:
+        return colors[level]
+
+    rounded = round(level, 1)
+    if rounded in colors:
+        return colors[rounded]
+
+    integer_level = int(level)
+    if float(integer_level) in colors:
+        return colors[float(integer_level)]
+
+    closest_key = min(colors.keys(), key=lambda key: abs(key - level))
+    return colors[closest_key]
 
 def load_cards_json(json_path):
     if not os.path.exists(json_path):
