@@ -4,6 +4,8 @@ import pygame
 import os
 import sys
 
+GAME_TITLE = "Card Battle Master Simulator v0.9.0"
+
 # 窗口设置
 WINDOW_WIDTH = 2880
 WINDOW_HEIGHT = 1800
@@ -12,11 +14,11 @@ BACKGROUND_COLOR = (30, 30, 50)
 UI_SCALE = 1.0 # UI缩放因子
 
 # 目录路径
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__)) # 项目根目录
 ASSETS_PATH = os.path.join(BASE_DIR, "assets") # 资源路径
 CARD_BASE_PATH = os.path.join(ASSETS_PATH, "outputs") # 卡牌路径
 
-# 颜色设置
+# 默认颜色设置
 COLORS = {
     "SSS": (255, 0, 0),        # level 0.0 红色
     "SS+": (255, 128, 114),    # level 0.5 粉色
@@ -30,7 +32,7 @@ COLORS = {
     "C+": (0, 128, 0),         # level 4.5 深绿色
     "C": (0, 255, 0),          # level 5.0 绿色
     "D": (128, 128, 128),      # level 6.0 灰色
-    "#elna": (255, 0, 0),      # 事件卡默认沿用最高级颜色
+    "#elna": (255, 20, 147),   # sp 玫红色
 }
 
 # 高DPI适配（仅Windows）
@@ -52,8 +54,7 @@ BUTTON_POSITION = (0, 0)
 
 def update_ui_scale(screen_width, screen_height):
     """根据屏幕尺寸更新UI缩放"""
-    global UI_SCALE, CARD_WIDTH, CARD_HEIGHT, CARD_SPACING
-    global BUTTON_WIDTH, BUTTON_HEIGHT, BUTTON_POSITION, WINDOW_WIDTH, WINDOW_HEIGHT
+    global UI_SCALE, BUTTON_WIDTH, BUTTON_HEIGHT, BUTTON_POSITION, WINDOW_WIDTH, WINDOW_HEIGHT
     
     WINDOW_WIDTH = screen_width
     WINDOW_HEIGHT = screen_height
@@ -69,6 +70,18 @@ def update_ui_scale(screen_width, screen_height):
     BUTTON_POSITION = (
         WINDOW_WIDTH // 2 - BUTTON_WIDTH // 2,
         int(WINDOW_HEIGHT * 0.85)  # 屏幕85%的位置
+    )
+
+def set_ui_scale(scale_value):
+    """手动设置UI缩放因子并刷新依赖的尺寸"""
+    global UI_SCALE, BUTTON_WIDTH, BUTTON_HEIGHT, BUTTON_POSITION
+    clamped = max(0.5, min(1.5, float(scale_value)))
+    UI_SCALE = clamped
+    BUTTON_WIDTH = int(BASE_BUTTON_WIDTH * UI_SCALE)
+    BUTTON_HEIGHT = int(BASE_BUTTON_HEIGHT * UI_SCALE)
+    BUTTON_POSITION = (
+        WINDOW_WIDTH // 2 - BUTTON_WIDTH // 2,
+        int(WINDOW_HEIGHT * 0.85)
     )
 
 # ==================== 字体配置 ====================

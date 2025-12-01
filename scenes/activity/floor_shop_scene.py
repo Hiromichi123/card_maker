@@ -64,7 +64,6 @@ class FloorShopScene(BaseScene):
         self.currency_ui.load_state()
         self.inventory = get_inventory()
         self.card_db = get_card_database()
-        self.traits: list[dict] = []
         self.shop_cards: list[dict] = []
         self.card_panel_rect: pygame.Rect | None = None
         self.node_info: dict = {}
@@ -144,7 +143,6 @@ class FloorShopScene(BaseScene):
         self.currency_ui.draw(self.screen, (int(WINDOW_WIDTH * 0.04), int(WINDOW_HEIGHT * 0.03)))
         self._draw_header()
         self._draw_cards()
-        self._draw_traits()
         self._draw_footer()
         for button in self.buttons:
             button.draw(self.screen)
@@ -154,39 +152,13 @@ class FloorShopScene(BaseScene):
         title = self.title_font.render("楼层补给站", True, (255, 245, 235))
         title_rect = title.get_rect(center=(WINDOW_WIDTH // 2, int(WINDOW_HEIGHT * 0.1)))
         self.screen.blit(title, title_rect)
-        subtitle_text = self.section_font.render("抵达补给节点，选择临时增益与卡牌。", True, (215, 230, 255))
+        subtitle_text = self.section_font.render("抵达补给节点，挑选心仪的卡牌。", True, (215, 230, 255))
         subtitle_rect = subtitle_text.get_rect(center=(WINDOW_WIDTH // 2, int(WINDOW_HEIGHT * 0.16)))
         self.screen.blit(subtitle_text, subtitle_rect)
         info = f"节点: {self.node_info.get('node_event', '未知')}  |  楼层: {self.node_info.get('floor', '-')}"
         info_surface = self.text_font.render(info, True, (230, 235, 255))
         info_rect = info_surface.get_rect(center=(WINDOW_WIDTH // 2, int(WINDOW_HEIGHT * 0.21)))
         self.screen.blit(info_surface, info_rect)
-
-    def _draw_traits(self):
-        if not self.traits:
-            return
-        panel_rect = getattr(self, "card_panel_rect", None)
-        width = int(WINDOW_WIDTH * 0.22)
-        if panel_rect:
-            base_x = max(int(panel_rect.x - width - int(24 * UI_SCALE)), int(WINDOW_WIDTH * 0.03))
-        else:
-            base_x = int(WINDOW_WIDTH * 0.08)
-        base_y = int(WINDOW_HEIGHT * 0.28)
-        height = int(110 * UI_SCALE)
-        gap = int(18 * UI_SCALE)
-        for idx, trait in enumerate(self.traits):
-            rect = pygame.Rect(base_x, base_y + idx * (height + gap), width, height)
-            panel = pygame.Surface(rect.size, pygame.SRCALPHA)
-            panel.fill((25, 40, 70, 200))
-            pygame.draw.rect(panel, (90, 150, 220, 230), panel.get_rect(), width=2, border_radius=int(12 * UI_SCALE))
-            self.screen.blit(panel, rect.topleft)
-            rarity = trait.get("rarity", "A")
-            color = self.RARITY_COLORS.get(rarity, (255, 255, 255))
-            name = self.text_font.render(f"[{rarity}] {trait.get('name')}", True, color)
-            self.screen.blit(name, (rect.x + int(16 * UI_SCALE), rect.y + int(12 * UI_SCALE)))
-            desc_lines = self._wrap_text(trait.get("desc", ""), self.small_font, width - int(32 * UI_SCALE))
-            for line_idx, surface in enumerate(desc_lines):
-                self.screen.blit(surface, (rect.x + int(16 * UI_SCALE), rect.y + int(48 * UI_SCALE) + line_idx * int(24 * UI_SCALE)))
 
     def _draw_cards(self):
         self.card_panel_rect = None
@@ -342,8 +314,6 @@ class FloorShopScene(BaseScene):
             self.shop_cards = self._build_placeholder_cards()
         self._normalize_shop_cards()
 
-        traits_payload = payload.get("traits") or self.shop_state.get("traits")
-        self.traits = traits_payload or self._build_placeholder_traits()
         self.generated_at = payload.get("generated_at") or self.shop_state.get("generated_at") or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.node_id = payload.get("node_id")
         self.node_info = {
@@ -370,13 +340,6 @@ class FloorShopScene(BaseScene):
             self._ensure_price_payload(slot_copy)
             normalized.append(slot_copy)
         self.shop_cards = normalized
-
-    def _build_placeholder_traits(self):
-        samples = [
-            {"name": "临时强化", "desc": "下一场战斗攻击卡 +10%。", "rarity": "A"},
-            {"name": "疾风", "desc": "首张卡牌费用 -1。", "rarity": "B"},
-        ]
-        return samples
 
     def _build_placeholder_cards(self):
         cards = self.card_db.get_all_cards()

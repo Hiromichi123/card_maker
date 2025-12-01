@@ -87,6 +87,22 @@ class ActivityMazeScene(BaseScene):
     }
     EVENT_PRICE_MULTIPLIER = 1.2
     REGULAR_DISCOUNT = 0.85
+    MAZE_BASE_GOLD = 500
+    MAZE_BASE_XP = 200
+    MAZE_EVENT_CARD_DROP = { # 活动卡牌掉落概率
+        "normal": 0.02,
+        "elite": 0.05,
+        "boss": 0.20,
+    }
+    BADGE_REWARD_RANGE = (5, 15) # 基础徽章奖励
+    BADGE_ELITE_BONUS = 50 # 精英额外徽章奖励
+    BADGE_BOSS_BONUS = 100 # Boss额外徽章奖励
+    BADGE_REWARD_COLOR = (255, 205, 180)
+    REWARD_INFO_COLOR = (190, 220, 255)
+    DROP_TEXT_COLOR = (255, 110, 110)
+    EVENT_SHOWCASE_SIZE = (144, 216)
+    EVENT_SHOWCASE_INTERVAL = 15.0
+    EVENT_HOVER_SCALE = 1.5
 
     def __init__(self, screen):
         super().__init__(screen)
@@ -148,6 +164,25 @@ class ActivityMazeScene(BaseScene):
         self.hovered_node_id = None
         self.last_strength_snapshot = None
 
+        self.event_card_base_size = (
+            int(self.EVENT_SHOWCASE_SIZE[0] * UI_SCALE),
+            int(self.EVENT_SHOWCASE_SIZE[1] * UI_SCALE),
+        )
+        showcase_margin = int(30 * UI_SCALE)
+        self.event_card_hit_rect = pygame.Rect(
+            showcase_margin,
+            WINDOW_HEIGHT - showcase_margin - self.event_card_base_size[1],
+            self.event_card_base_size[0],
+            self.event_card_base_size[1],
+        )
+        self.event_card_entries = self._load_event_showcase_cards()
+        self.event_card_index = 0
+        self.event_card_timer = 0.0
+        self.event_card_interval = self.EVENT_SHOWCASE_INTERVAL
+        self.event_card_hover = False
+        self.event_card_draw_rect = self.event_card_hit_rect.copy()
+        self.event_card_hover_scale = self.EVENT_HOVER_SCALE
+
         self.is_moving = False
         self.move_start_id = None
         self.move_target_id = None
@@ -172,6 +207,7 @@ class ActivityMazeScene(BaseScene):
         elif event.type == pygame.MOUSEMOTION:
             self.background.update_mouse_position(event.pos)
             self._update_hover(event.pos)
+            self._update_event_card_hover(event.pos)
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             self._handle_node_click(event.pos)
 
@@ -184,6 +220,7 @@ class ActivityMazeScene(BaseScene):
         self.reset_button.update(dt)
         self._update_move_animation(dt)
         self.player_orb_phase += dt * 2.5
+        self._update_event_card_cycle(dt)
 
     def draw(self):
         self.background.draw(self.screen)
@@ -191,6 +228,7 @@ class ActivityMazeScene(BaseScene):
         self._draw_connections()
         self._draw_nodes()
         self._draw_player_orb()
+        self._draw_event_showcase()
         self.detail_panel.draw(self.screen)
         self._draw_legend()
         self.reset_button.draw(self.screen)
@@ -667,13 +705,20 @@ class ActivityMazeScene(BaseScene):
             "subtitle": f"节点 #{node['id']}",
             "description": f"类型：{style['label']} 状态：{explored_text}。",
             "tags": tags,
-            "rewards": [self._node_reward_hint(node_type)],
         }
         if self._is_battle_node(node_type):
             ctx = self._build_strength_context(node_type, use_average_random=True)
             entry["description"] += f" 预估强度系数：{ctx['total']:.2f}。"
             estimated_size = self._calc_deck_size(ctx["total"])
-            entry.setdefault("rewards", []).append(f"敌方牌组约 {estimated_size} 张")
+            reward_preview = self._build_maze_reward_preview(node_type, ctx)
+            self._append_reward_line(
+                reward_preview,
+                f"敌方牌组约 {estimated_size} 张",
+                self.REWARD_INFO_COLOR,
+            )
+            entry["rewards"] = reward_preview
+        else:
+            entry["rewards"] = {"items": [self._node_reward_hint(node_type)]}
         return entry
 
     def _node_reward_hint(self, node_type):
@@ -697,6 +742,8 @@ class ActivityMazeScene(BaseScene):
             deck_payload = self._generate_temp_enemy_deck(node)
             self._write_temp_deck(deck_payload)
             stage_id = f"{self.floor_key}-{node.get('id')}"
+            strength_ctx = (deck_payload.get("meta") or {}).get("strength")
+            stage_reward = self._build_maze_stage_reward(node_type, strength_ctx)
             battle_payload = {
                 "stage_id": stage_id,
                 "stage_name": node.get("event", "迷宫战斗"),
@@ -704,7 +751,11 @@ class ActivityMazeScene(BaseScene):
                 "background": None,
                 "node_type": node_type,
                 "floor": self.floor_key,
+                "return_scene": "activity_maze_scene",
+                "return_payload": {"resume_floor": self.floor_key, "resume_node": node.get("id")},
             }
+            if stage_reward:
+                battle_payload["stage_reward"] = stage_reward
             set_payload("simple_battle", battle_payload)
             self.switch_to("simple_battle")
             return
@@ -813,6 +864,47 @@ class ActivityMazeScene(BaseScene):
         min_size, max_size = self.TEMP_DECK_SIZE_LIMITS
         return max(min_size, min(max_size, deck_size))
 
+    def _append_reward_line(self, reward_dict, text, color=None):
+        if not reward_dict or not text:
+            return
+        line = {"text": text}
+        if color:
+            line["color"] = tuple(color)
+        reward_dict.setdefault("items", []).append(line)
+
+    def _remove_badge_hint_line(self, reward_dict, node_type):
+        if not reward_dict:
+            return
+        hint = self._badge_reward_hint(node_type)
+        items = reward_dict.get("items") or []
+        filtered = []
+        for line in items:
+            if isinstance(line, dict):
+                if line.get("text") == hint:
+                    continue
+            elif isinstance(line, str) and line == hint:
+                continue
+            filtered.append(line)
+        reward_dict["items"] = filtered
+
+    def _badge_reward_hint(self, node_type):
+        base_min, base_max = self.BADGE_REWARD_RANGE
+        text = f"徽章奖励 {base_min}-{base_max}"
+        if node_type == "elite":
+            text += f" +{self.BADGE_ELITE_BONUS}(精英)"
+        elif node_type == "boss":
+            text += f" +{self.BADGE_BOSS_BONUS}(Boss)"
+        return text
+
+    def _roll_badge_reward_amount(self, node_type):
+        base = random.randint(*self.BADGE_REWARD_RANGE)
+        bonus = 0
+        if node_type == "elite":
+            bonus += self.BADGE_ELITE_BONUS
+        elif node_type == "boss":
+            bonus += self.BADGE_BOSS_BONUS
+        return base + bonus
+
     def _build_strength_context(self, node_type, use_average_random=False):
         floor_cfg = self.FLOOR_SETTINGS.get(self.floor_key, self.FLOOR_SETTINGS[self.FLOOR_KEY])
         floor_base = floor_cfg.get("strength_base", 1.0)
@@ -834,6 +926,48 @@ class ActivityMazeScene(BaseScene):
             "random_factor": random_factor,
             "explored_ratio": explored_ratio,
         }
+
+    def _build_maze_reward_preview(self, node_type, strength_ctx):
+        if not strength_ctx:
+            strength_ctx = {"total": 1.0}
+        strength = max(0.5, float(strength_ctx.get("total", 1.0)))
+        gold = max(1, int(round(self.MAZE_BASE_GOLD * strength)))
+        xp = max(1, int(round(self.MAZE_BASE_XP * strength)))
+        reward = {"gold": gold, "xp": xp, "items": []}
+        self._append_reward_line(reward, f"奖励倍数 x{strength:.2f}", self.REWARD_INFO_COLOR)
+        drop_chance = self.MAZE_EVENT_CARD_DROP.get(node_type, 0.0)
+        if drop_chance > 0:
+            percent = int(round(drop_chance * 100))
+            label = f"活动限定卡牌掉落 {percent}%"
+            reward["drops"] = [{"text": label, "color": self.DROP_TEXT_COLOR}]
+        self._append_reward_line(reward, self._badge_reward_hint(node_type), self.BADGE_REWARD_COLOR)
+        return reward
+
+    def _build_maze_stage_reward(self, node_type, strength_ctx):
+        if not self._is_battle_node(node_type):
+            return None
+        base_reward = self._build_maze_reward_preview(node_type, strength_ctx)
+        drop_chance = self.MAZE_EVENT_CARD_DROP.get(node_type, 0.0)
+        if drop_chance > 0:
+            drop_label_entry = None
+            if base_reward.get("drops"):
+                drop_label_entry = base_reward["drops"][0]
+            if isinstance(drop_label_entry, dict):
+                label_text = drop_label_entry.get("text", "活动限定卡牌掉落")
+            elif drop_label_entry:
+                label_text = str(drop_label_entry)
+            else:
+                label_text = "活动限定卡牌掉落"
+            base_reward["event_card_drop"] = {
+                "chance": drop_chance,
+                "label": label_text,
+                "source": "activity_maze_scene",
+            }
+        badge_amount = self._roll_badge_reward_amount(node_type)
+        base_reward["badges"] = badge_amount
+        self._remove_badge_hint_line(base_reward, node_type)
+        self._append_reward_line(base_reward, f"徽章 +{badge_amount}", self.BADGE_REWARD_COLOR)
+        return base_reward
 
     def _get_explored_ratio(self):
         if not self.nodes:
@@ -1127,6 +1261,130 @@ class ActivityMazeScene(BaseScene):
         pygame.draw.circle(orb_surface, (200, 255, 200, 220), (radius * 2, radius * 2), int(radius * 0.35))
         orb_rect = orb_surface.get_rect(center=center)
         self.screen.blit(orb_surface, orb_rect)
+
+    def _update_event_card_cycle(self, dt):
+        if not self.event_card_entries:
+            return
+        self.event_card_timer += dt
+        if self.event_card_timer >= self.event_card_interval:
+            self.event_card_timer = 0.0
+            self.event_card_index = (self.event_card_index + 1) % len(self.event_card_entries)
+
+    def _update_event_card_hover(self, mouse_pos):
+        if not self.event_card_entries:
+            self.event_card_hover = False
+            return
+        self.event_card_hover = self.event_card_hit_rect.collidepoint(mouse_pos)
+
+    def _get_current_event_card(self):
+        if not self.event_card_entries:
+            return None
+        return self.event_card_entries[self.event_card_index % len(self.event_card_entries)]
+
+    def _draw_event_showcase(self):
+        entry = self._get_current_event_card()
+        if not entry:
+            info = self.small_font.render("暂无活动卡牌", True, (220, 220, 235))
+            info_rect = info.get_rect(bottomleft=(self.event_card_hit_rect.left, self.event_card_hit_rect.bottom))
+            self.screen.blit(info, info_rect)
+            return
+        base_w, base_h = self.event_card_base_size
+        scale = self.event_card_hover_scale if self.event_card_hover else 1.0
+        width = int(base_w * scale)
+        height = int(base_h * scale)
+        x = self.event_card_hit_rect.left
+        y = self.event_card_hit_rect.bottom - height
+        card_surface = entry["surface"]
+        if scale != 1.0:
+            card_surface = pygame.transform.smoothscale(card_surface, (width, height))
+        highlight_rect = pygame.Rect(
+            x - int(8 * UI_SCALE),
+            y - int(8 * UI_SCALE),
+            width + int(16 * UI_SCALE),
+            height + int(16 * UI_SCALE),
+        )
+        glow = pygame.Surface(highlight_rect.size, pygame.SRCALPHA)
+        glow.fill((255, 230, 150, 65))
+        self.screen.blit(glow, highlight_rect.topleft)
+        pygame.draw.rect(self.screen, (255, 220, 120), highlight_rect, width=3, border_radius=int(18 * UI_SCALE))
+        self.screen.blit(card_surface, (x, y))
+        self.event_card_draw_rect = pygame.Rect(x, y, width, height)
+        if self.event_card_hover:
+            self._draw_event_card_tooltip(entry, highlight_rect)
+
+    def _draw_event_card_tooltip(self, entry, anchor_rect):
+        card = entry.get("card")
+        if not card:
+            return
+        lines = [card.name, f"稀有度 {getattr(card, 'rarity', '?')}"]
+        description = getattr(card, "description", "") or "暂无描述"
+        lines.extend(self._wrap_tooltip_lines(description, self.small_font, int(260 * UI_SCALE)))
+        padding = int(12 * UI_SCALE)
+        surfaces = [self.small_font.render(line, True, (250, 250, 255)) for line in lines]
+        width = max((surf.get_width() for surf in surfaces), default=0) + padding * 2
+        height = sum(surf.get_height() for surf in surfaces) + padding * 2 + int(4 * UI_SCALE * (len(surfaces) - 1))
+        tooltip_rect = pygame.Rect(
+            anchor_rect.left,
+            anchor_rect.top - height - int(12 * UI_SCALE),
+            width,
+            height,
+        )
+        if tooltip_rect.top < int(20 * UI_SCALE):
+            tooltip_rect.top = anchor_rect.bottom + int(12 * UI_SCALE)
+        tooltip_surface = pygame.Surface(tooltip_rect.size, pygame.SRCALPHA)
+        border_radius = int(12 * UI_SCALE)
+        pygame.draw.rect(tooltip_surface, (15, 18, 35, 230), tooltip_surface.get_rect(), border_radius=border_radius)
+        pygame.draw.rect(tooltip_surface, (255, 220, 120), tooltip_surface.get_rect(), width=2, border_radius=border_radius)
+        y = padding
+        line_gap = int(4 * UI_SCALE)
+        for idx, surf in enumerate(surfaces):
+            tooltip_surface.blit(surf, (padding, y))
+            y += surf.get_height()
+            if idx < len(surfaces) - 1:
+                y += line_gap
+        self.screen.blit(tooltip_surface, tooltip_rect.topleft)
+
+    def _wrap_tooltip_lines(self, text, font, max_width):
+        if not text:
+            return []
+        lines = []
+        current = ""
+        for ch in text:
+            trial = current + ch
+            if font.size(trial)[0] > max_width and current:
+                lines.append(current)
+                current = ch
+            else:
+                current = trial
+        if current:
+            lines.append(current)
+        return lines
+
+    def _load_event_showcase_cards(self):
+        db = get_card_database()
+        cards = db.get_cards_by_rarity(self.EVENT_CARD_RARITY) or []
+        entries = []
+        for card in cards:
+            surface = self._load_event_card_surface(card)
+            entries.append({"card": card, "surface": surface})
+        return entries
+
+    def _load_event_card_surface(self, card):
+        width, height = self.event_card_base_size
+        placeholder = pygame.Surface((width, height), pygame.SRCALPHA)
+        color = COLORS.get(getattr(card, "rarity", "A"), (200, 200, 200))
+        fill_color = color if len(color) == 3 else color[:3]
+        placeholder.fill((*fill_color, 255))
+        title = self.small_font.render(card.name[:4], True, (0, 0, 0))
+        placeholder.blit(title, title.get_rect(center=(width // 2, height // 2)))
+        image_path = getattr(card, "image_path", "")
+        if image_path and os.path.exists(image_path):
+            try:
+                image = pygame.image.load(image_path).convert_alpha()
+                return pygame.transform.smoothscale(image, (width, height))
+            except Exception:
+                pass
+        return placeholder
 
     def _draw_hint(self):
         hint_text = "绿色光球表示当前位置，先点击相邻节点查看详情，再次点击确认并播放移动动画。"

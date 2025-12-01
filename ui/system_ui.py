@@ -23,6 +23,7 @@ DEFAULT_DATA_FILE = os.path.join(DEFAULT_DATA_DIR, "profile.json") # 数据文�
 DEFAULT_AVATAR = "assets/ui/avatar.jpg" # 头像图片路径
 DEFAULT_GOLD_ICON = "assets/ui/gold.png" # 金币图标路径
 DEFAULT_CRYSTAL_ICON = "assets/ui/crystal.png" # 水晶图标路径
+DEFAULT_BADGE_ICON = "assets/ui/badge.png" # 活动徽章图标路径
 
 # XP成长参数
 base_xp = 100           # 升级基础经验值
@@ -50,6 +51,7 @@ class CurrencyLevelUI:
         # 基础状态
         self.golds = 0
         self.crystals = 0
+        self.badges = 0
         self.level = 1
         self.xp = 0
 
@@ -59,9 +61,11 @@ class CurrencyLevelUI:
         self._avatar_path = DEFAULT_AVATAR
         self._gold_icon_path = DEFAULT_GOLD_ICON
         self._crystal_icon_path = DEFAULT_CRYSTAL_ICON
+        self._badge_icon_path = DEFAULT_BADGE_ICON
         self._avatar_surf = None
         self._gold_surf = None
         self._crystal_surf = None
+        self._badge_surf = None
 
         self.font = get_font(int(24 * UI_SCALE))
         self.font_large = get_font(int(30 * UI_SCALE))
@@ -77,6 +81,7 @@ class CurrencyLevelUI:
         self._avatar_surf = self._load_image(self._avatar_path, (self.avatar_size, self.avatar_size))
         self._gold_surf = self._load_image(self._gold_icon_path, (self.icon_size, self.icon_size))
         self._crystal_surf = self._load_image(self._crystal_icon_path, (self.icon_size, self.icon_size))
+        self._badge_surf = self._load_image(self._badge_icon_path, (self.icon_size, self.icon_size))
 
     def _load_image(self, path, size):
         if path and os.path.exists(path):
@@ -100,6 +105,7 @@ class CurrencyLevelUI:
                 data = json.load(f)
             self.golds = int(data.get("golds", self.golds))
             self.crystals = int(data.get("crystals", self.crystals))
+            self.badges = int(data.get("badges", self.badges))
             self.level = int(data.get("level", self.level))
             self.xp = int(data.get("xp", self.xp))
             self.base_xp = int(data.get("base_xp", self.base_xp))
@@ -114,6 +120,7 @@ class CurrencyLevelUI:
             data = {
                 "golds": int(self.golds),
                 "crystals": int(self.crystals),
+                "badges": int(self.badges),
                 "level": int(self.level),
                 "xp": int(self.xp),
                 "base_xp": int(self.base_xp),
@@ -205,6 +212,41 @@ class CurrencyLevelUI:
         self.save_state()
         return True
 
+    def add_badges(self, amount: int):
+        try:
+            self.badges += int(amount)
+            if self.badges < 0:
+                self.badges = 0
+        except Exception:
+            pass
+
+    def get_badges(self) -> int:
+        return int(self.badges)
+
+    def has_enough_badges(self, amount: int) -> bool:
+        try:
+            return self.badges >= int(amount)
+        except Exception:
+            return False
+
+    def spend_badges(self, amount: int) -> bool:
+        try:
+            cost = int(amount)
+        except Exception:
+            return False
+
+        if cost <= 0:
+            return True
+
+        if not self.has_enough_badges(cost):
+            return False
+
+        self.badges -= cost
+        if self.badges < 0:
+            self.badges = 0
+        self.save_state()
+        return True
+
     def add_xp(self, amount: int):
         info = {"levels_gained": 0, "xp_overflow": 0}
         try:
@@ -228,17 +270,25 @@ class CurrencyLevelUI:
         info["xp_overflow"] = int(self.xp)
         return info
 
-    def award_victory(self, golds: int = 50, xp: int = 30, crystals: int = 0):
+    def award_victory(self, golds: int = 50, xp: int = 30, crystals: int = 0, badges: int = 0):
         """玩家赢得一场战斗时调用。添加货币/经验值"""
         before_level = self.level
         self.add_golds(golds)
         self.add_crystals(crystals)
+        badge_gain = 0
+        try:
+            badge_gain = max(0, int(badges))
+        except Exception:
+            badge_gain = 0
+        if badge_gain:
+            self.add_badges(badge_gain)
         res = self.add_xp(xp)
         self.save_state()
         return {
             "golds_added": golds,
             "xp_added": xp,
             "crystals_added": crystals,
+            "badges_added": badge_gain,
             "levels_gained": res["levels_gained"],
             "new_level": self.level,
             "xp": self.xp
@@ -255,10 +305,34 @@ class CurrencyLevelUI:
             self.xp = int(xp)
 
     # ---------------- drawing ----------------
-    def draw(self, surface: pygame.Surface, position: tuple=(UI_START_X, UI_START_Y)):
+    def draw(self, surface: pygame.Surface, position: tuple=(UI_START_X, UI_START_Y), show_badges: bool=False):
         x, y = position
         # 计算整体尺寸
-        width = self.avatar_size + self.padding + max(self.bar_w, 120) + self.padding + self.icon_size + 60
+        currency_entries = [
+            (self._gold_surf, str(self.golds), (255, 220, 120)),
+            (self._crystal_surf, str(self.crystals), (170, 200, 255)),
+        ]
+        if show_badges:
+            if self._badge_surf is None:
+                self._badge_surf = self._load_image(self._badge_icon_path, (self.icon_size, self.icon_size))
+            currency_entries.append((self._badge_surf, str(self.badges), (255, 190, 160)))
+
+        icon_text_gap = int(8 * UI_SCALE)
+        entry_gap = int(50 * UI_SCALE)
+        currency_block_width = 0
+        currency_surfaces = []
+        for idx, (icon_surf, value, color) in enumerate(currency_entries):
+            text_surface = self.font.render(value, True, color)
+            entry_width = self.icon_size + icon_text_gap + text_surface.get_width()
+            if idx > 0:
+                currency_block_width += entry_gap
+            currency_block_width += entry_width
+            currency_surfaces.append((icon_surf, text_surface, color, entry_width))
+
+        xp_right = self.avatar_size + 2 * self.padding + self.bar_w + int(60 * UI_SCALE)
+        icons_x = self.avatar_size + 3 * self.padding
+        currency_right = icons_x + currency_block_width
+        width = max(xp_right + int(30 * UI_SCALE), currency_right + self.padding)
         height = max(self.avatar_size, self.bar_h + self.padding * 2 + 32)
 
         # 半透明背景表面
@@ -314,18 +388,15 @@ class CurrencyLevelUI:
         # 金币和水晶区域（xp下方）
         icons_x = bar_x + self.padding
         icons_y = self.padding + self.bar_h + 16
-
-        # 金币（经验条下方）
-        gold_pos = (icons_x, icons_y)
-        bg_surf.blit(self._gold_surf, gold_pos)
-        gold_txt = self.font.render(str(self.golds), True, (255, 220, 120))
-        bg_surf.blit(gold_txt, (gold_pos[0] + self.icon_size + 6, gold_pos[1] + (self.icon_size - gold_txt.get_height()) // 2))
-
-        # 水晶（金币右侧）
-        crystal_pos = (icons_x + self.icon_size + int(200 * UI_SCALE), icons_y)
-        bg_surf.blit(self._crystal_surf, crystal_pos)
-        crystal_txt = self.font.render(str(self.crystals), True, (170, 200, 255))
-        bg_surf.blit(crystal_txt, (crystal_pos[0] + self.icon_size + 6, crystal_pos[1] + (self.icon_size - crystal_txt.get_height()) // 2))
+        current_x = icons_x
+        for idx, (icon_surf, text_surface, _color, entry_width) in enumerate(currency_surfaces):
+            if idx > 0:
+                current_x += entry_gap
+            bg_surf.blit(icon_surf, (current_x, icons_y))
+            text_x = current_x + self.icon_size + icon_text_gap
+            text_y = icons_y + (self.icon_size - text_surface.get_height()) // 2
+            bg_surf.blit(text_surface, (text_x, text_y))
+            current_x += entry_width
 
         # 最后将 bg_surf 绘制到提供的表面上
         surface.blit(bg_surf, (x, y))

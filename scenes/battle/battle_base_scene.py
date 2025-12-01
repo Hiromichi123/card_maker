@@ -1,6 +1,7 @@
 """战斗场景基类"""
 import math
 import os
+import random
 import pygame
 from time import time
 from config import *
@@ -8,11 +9,15 @@ from scenes.base.base_scene import BaseScene
 from ui.button import Button
 from utils.battle_component import CardSlot, HealthBar # 战斗场景组件
 from utils.image_cache import get_scaled_image
+from utils.inventory import get_inventory
+from utils.card_database import get_card_database
 from game.hand_card import HandManager, HandCard, CARD_WIDTH, CARD_HEIGHT # 手牌管理器，手牌类
 from game.deck_renderer import DeckRenderer #　卡堆渲染器
 from game.card_animation import SlideAnimation # 滑动动画
 from game.card_animation import AttackAnimation # 攻击动画
 from game.skills import get_skill_registry, BattleContext, SkillTrigger # 技能系统
+from game.card_system import CARD_PROBABILITIES
+from ui.system_ui import CurrencyLevelUI
 
 # region  常量配置
 # 背景设置
@@ -58,6 +63,11 @@ PLAYER_MAX_HP = 20
 PLAYER_CURRENT_HP = 20
 ENEMY_MAX_HP = 20
 ENEMY_CURRENT_HP = 20
+# 额外奖励配置
+SPECIAL_CARD_DROP_FLAG = "稀有卡牌概率掉落"
+SPECIAL_CRYSTAL_DROP_FLAG = "水晶掉落"
+SPECIAL_CARD_DROP_CHANCE = 0.10
+SPECIAL_CRYSTAL_RANGE = (3, 10)
 # endregion
 
 """战斗场景基类"""
@@ -133,6 +143,12 @@ class BattleBaseScene(BaseScene):
         self.turn_number = 1             # 回合数
         self.cards_played_this_turn = 0  # 本回合已出牌数
         self.max_cards_per_turn = 1      # 每回合最多出牌数
+        self.owner_turn_markers = {"player": 0, "enemy": 0}
+        self.copy_usage_state = {
+            "player": {"turn_marker": 0, "used": False},
+            "enemy": {"turn_marker": 0, "used": False},
+        }
+        self._advance_owner_turn("player")
         
         # 战斗状态
         self.battle_in_progress = False  # 是否正在进行战斗结算
@@ -148,6 +164,28 @@ class BattleBaseScene(BaseScene):
         # 游戏结束状态
         self.game_over = False
         self.winner = None
+        self.show_settlement = False
+        self.settlement_data = {}
+        self.stage_reward = None
+        self.default_reward = {"gold": 500, "xp": 100, "xp_defeat": 60}
+        self.currency_ui = CurrencyLevelUI()
+        self.currency_ui.load_state()
+        self.card_database = get_card_database()
+        self.inventory = get_inventory()
+        self.confirm_button = Button(
+            int(WINDOW_WIDTH * 0.5) - int(120 * UI_SCALE),
+            int(WINDOW_HEIGHT * 0.65),
+            int(240 * UI_SCALE),
+            int(64 * UI_SCALE),
+            "确认",
+            color=(80, 150, 80),
+            hover_color=(120, 190, 120),
+            font_size=36,
+            on_click=lambda: self._return_after_battle(),
+        )
+        self.return_scene = None
+        self.return_payload = None
+        self.fallback_scene = "main_menu"
 
     """====================核心功能类===================="""
     def enter(self):
@@ -194,18 +232,19 @@ class BattleBaseScene(BaseScene):
                 who, _ = self.draw_queue.pop(0)
                 self.draw_card(who, animate=True)
 
-    def handle_events(self, event):
-        # 基本按键处理
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_ESCAPE:
-                self.player_hand.clear_selection()
-                self.switch_to("main_menu")
-        
-        # 游戏结束时只允许返回菜单
+    def handle_event(self, event):
+        super().handle_event(event)
+
         if self.game_over:
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                self.switch_to("main_menu")
+                self._return_after_battle()
+            else:
+                self.confirm_button.handle_event(event)
             return
+
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            self.player_hand.clear_selection()
+            self.switch_to("main_menu")
 
     def draw(self):
         self.screen.blit(self.background, (0, 0)) # 背景
@@ -230,10 +269,10 @@ class BattleBaseScene(BaseScene):
             self.draw_game_over_overlay()
 
     def initialize_battle(self):
-        # 从卡牌数据库获取卡组
-        from utils.card_database import get_card_database
-        db = get_card_database()
-        return db
+        # 确保卡牌数据库已加载
+        if not getattr(self, "card_database", None):
+            self.card_database = get_card_database()
+        return self.card_database
 
     def check_game_over(self):
         """检查游戏是否结束"""
@@ -244,31 +283,182 @@ class BattleBaseScene(BaseScene):
         
         # 失败条件：HP ≤ 0 或 无卡牌
         if player_hp <= 0 or not player_has_cards:
-            self.game_over = True
-            self.winner = "player2"
-            print("游戏结束，敌人获胜！")
-            print("[游戏结束] 3秒后返回主菜单...")
-            pygame.time.delay(3000)
-            self.switch_to("main_menu")
+            self._end_battle("player2")
             return True
         elif enemy_hp <= 0 or not enemy_has_cards:
-            self.game_over = True
-            self.winner = "player1"
-            print("游戏结束，玩家获胜！")
-            print("[游戏结束] 3秒后返回主菜单...")
-            pygame.time.delay(3000)
-            self.switch_to("main_menu")
+            self._end_battle("player1")
             return True
         return False
+
+    def _calculate_rewards(self, victory: bool) -> dict:
+        reward = {
+            "gold": 0,
+            "xp": self.default_reward["xp_defeat"],
+            "crystals": 0,
+            "items": [],
+            "badges": 0,
+        }
+        if victory:
+            reward["gold"] = self.default_reward["gold"]
+            reward["xp"] = self.default_reward["xp"]
+            if isinstance(self.stage_reward, dict):
+                reward["gold"] = self.stage_reward.get("gold", reward["gold"])
+                reward["xp"] = self.stage_reward.get("xp", reward["xp"])
+                reward["crystals"] = self.stage_reward.get("crystals", reward["crystals"])
+                reward["items"] = list(self.stage_reward.get("items", []))
+                reward["badges"] = self.stage_reward.get("badges", reward["badges"])
+        return reward
+
+    def _apply_stage_reward_effects(self, reward: dict):
+        if not reward or not isinstance(self.stage_reward, dict):
+            return
+        stage_items = self.stage_reward.get("items") or []
+        if SPECIAL_CARD_DROP_FLAG in stage_items:
+            card_info = self._try_award_bonus_card()
+            if card_info:
+                reward.setdefault("bonus_cards", []).append(card_info)
+        if SPECIAL_CRYSTAL_DROP_FLAG in stage_items:
+            crystals = random.randint(*SPECIAL_CRYSTAL_RANGE)
+            reward["crystals"] = reward.get("crystals", 0) + crystals
+        event_drop = self.stage_reward.get("event_card_drop")
+        if isinstance(event_drop, dict):
+            card_info = self._try_award_event_card(event_drop)
+            if card_info:
+                reward.setdefault("bonus_cards", []).append(card_info)
+
+    def _try_award_bonus_card(self):
+        if random.random() > SPECIAL_CARD_DROP_CHANCE:
+            return None
+        card = self._draw_card_from_regular_pool()
+        if not card:
+            return None
+        info = {"name": getattr(card, "name", "未知卡牌"), "rarity": getattr(card, "rarity", "?")}
+        self._grant_card_to_inventory(card)
+        return info
+
+    def _try_award_event_card(self, drop_info):
+        try:
+            chance = float(drop_info.get("chance", 0))
+        except Exception:
+            chance = 0.0
+        if chance <= 0 or random.random() > chance:
+            return None
+        card = self._draw_event_card()
+        if not card:
+            return None
+        info = {
+            "name": getattr(card, "name", "未知卡牌"),
+            "rarity": getattr(card, "rarity", "?"),
+        }
+        if drop_info.get("label"):
+            info["label"] = drop_info["label"]
+        self._grant_card_to_inventory(card)
+        return info
+
+    def _draw_card_from_regular_pool(self):
+        db = getattr(self, "card_database", None) or get_card_database()
+        self.card_database = db
+        # 尝试若干次按权重获取指定稀有度
+        for _ in range(5):
+            rarity = self._weighted_rarity_choice(CARD_PROBABILITIES)
+            if not rarity:
+                break
+            candidates = db.get_cards_by_rarity(rarity)
+            if candidates:
+                return random.choice(candidates)
+        all_cards = db.get_all_cards()
+        if all_cards:
+            return random.choice(all_cards)
+        return None
+
+    def _draw_event_card(self):
+        db = getattr(self, "card_database", None) or get_card_database()
+        self.card_database = db
+        event_cards = []
+        event_rarities = getattr(db, "EVENT_DIRS", [])
+        for rarity in event_rarities:
+            event_cards.extend(db.get_cards_by_rarity(rarity) or [])
+        if not event_cards:
+            event_cards = [card for card in db.get_all_cards() if getattr(card, "is_event_card", False)]
+        if not event_cards:
+            return None
+        return random.choice(event_cards)
+
+    def _grant_card_to_inventory(self, card):
+        if not card:
+            return
+        try:
+            inventory = getattr(self, "inventory", None) or get_inventory()
+            self.inventory = inventory
+            normalized = card.image_path.replace("\\", "/") if getattr(card, "image_path", None) else None
+            rarity = getattr(card, "rarity", "A")
+            if normalized:
+                inventory.add_card(normalized, rarity)
+                inventory.save()
+        except Exception as exc:
+            print(f"[Battle] 奖励卡牌保存失败: {exc}")
+
+    def _weighted_rarity_choice(self, probability_map):
+        if not probability_map:
+            return None
+        total = sum(probability_map.values())
+        if total <= 0:
+            return None
+        roll = random.uniform(0, total)
+        accum = 0.0
+        for rarity, weight in probability_map.items():
+            accum += weight
+            if roll <= accum:
+                return rarity
+        # 回退到最后一个键
+        return next(iter(probability_map))
+
+    def _end_battle(self, winner: str):
+        if self.game_over:
+            return
+        self.game_over = True
+        self.winner = winner
+        victory = winner == "player1"
+        reward = self._calculate_rewards(victory)
+        if victory:
+            self._apply_stage_reward_effects(reward)
+        reward_result = {}
+        if victory:
+            reward_result = self.currency_ui.award_victory(
+                golds=reward["gold"],
+                xp=reward["xp"],
+                crystals=reward.get("crystals", 0),
+                badges=reward.get("badges", 0),
+            )
+        else:
+            self.currency_ui.add_xp(reward["xp"])
+            self.currency_ui.save_state()
+        self.settlement_data = {
+            "victory": victory,
+            "reward": reward,
+            "currency_result": reward_result,
+        }
+        print("战斗结束，等待玩家确认结算。")
+
+    def _return_after_battle(self):
+        target_scene = self.return_scene or self.fallback_scene or "main_menu"
+        payload = self.return_payload or {}
+        if payload and target_scene:
+            from utils.scene_payload import set_payload
+            set_payload(target_scene, payload)
+        if target_scene:
+            self.switch_to(target_scene)
 
     """====================回合控制类===================="""
     def switch_turn(self):
         """切换回合"""
         if self.current_turn == "player1":
             self.current_turn = "player2"
+            self._advance_owner_turn("enemy")
         else:
             self.current_turn = "player1"
             self.turn_number += 1
+            self._advance_owner_turn("player")
         
         # 重置回合状态
         self.turn_phase = "playing"
@@ -279,6 +469,34 @@ class BattleBaseScene(BaseScene):
         draw_who = "player" if self.current_turn == "player1" else "enemy"
         self.draw_card(draw_who, animate=True)
         self.start_turn_indicator_animation()
+        self._auto_skip_turn_if_no_space(draw_who)
+
+    def _advance_owner_turn(self, owner):
+        if owner not in ("player", "enemy"):
+            return
+        marker = self.owner_turn_markers.get(owner, 0) + 1
+        self.owner_turn_markers[owner] = marker
+        state = self.copy_usage_state.setdefault(owner, {"turn_marker": marker, "used": False})
+        state["turn_marker"] = marker
+        state["used"] = False
+
+    def can_use_copy_skill(self, owner):
+        if owner not in ("player", "enemy"):
+            return True
+        state = self.copy_usage_state.setdefault(owner, {"turn_marker": 0, "used": False})
+        marker = self.owner_turn_markers.get(owner, 0)
+        if state.get("turn_marker") != marker:
+            state["turn_marker"] = marker
+            state["used"] = False
+        return not state.get("used", False)
+
+    def mark_copy_skill_used(self, owner):
+        if owner not in ("player", "enemy"):
+            return
+        marker = self.owner_turn_markers.get(owner, 0)
+        state = self.copy_usage_state.setdefault(owner, {"turn_marker": marker, "used": False})
+        state["turn_marker"] = marker
+        state["used"] = True
 
     def end_turn(self):
         """结束回合"""
@@ -369,13 +587,41 @@ class BattleBaseScene(BaseScene):
 
     def can_play_card(self):
         """检查当前回合是否可以出牌"""
-        result = self.turn_phase == "playing" and self.cards_played_this_turn < self.max_cards_per_turn
-        return result
+        if self.turn_phase != "playing":
+            return False
+        if self.cards_played_this_turn >= self.max_cards_per_turn:
+            return False
+        owner = "player" if self.current_turn == "player1" else "enemy"
+        if self._owner_slots_full(owner):
+            return False
+        return True
 
     def can_end_turn(self):
         """检查是否可以结束回合"""
         result = self.turn_phase == "playing" and self.cards_played_this_turn >= self.max_cards_per_turn
         return result
+
+    def _owner_slots_full(self, owner):
+        if owner == "player":
+            battle_slots = self.player_battle_slots
+            waiting_slots = self.player_waiting_slots
+        else:
+            battle_slots = self.enemy_battle_slots
+            waiting_slots = self.enemy_waiting_slots
+        battle_full = all(slot.has_card() for slot in battle_slots)
+        waiting_full = all(slot.has_card() for slot in waiting_slots)
+        return battle_full and waiting_full
+
+    def _auto_skip_turn_if_no_space(self, owner):
+        if owner not in ("player", "enemy"):
+            return False
+        if not self._owner_slots_full(owner):
+            return False
+        if self.turn_phase != "playing":
+            return False
+        self.cards_played_this_turn = self.max_cards_per_turn
+        self.end_turn()
+        return True
 
     """====================初始化和资源加载类===================="""
     def load_background(self):
@@ -762,30 +1008,63 @@ class BattleBaseScene(BaseScene):
 
     def draw_game_over_overlay(self):
         """绘制游戏结束遮罩"""
-        # 半透明黑色遮罩
         overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 180))
+        overlay.fill((0, 0, 0, 200))
         self.screen.blit(overlay, (0, 0))
-        
-        # 胜利/失败文字
+
         result_font = get_font(max(48, int(72 * UI_SCALE)))
-        
-        if self.winner == "player1":
-            result_text = "胜利！"
-            result_color = (100, 255, 100)
-        else:
-            result_text = "失败..."
-            result_color = (255, 100, 100)
-        
+        victory = self.winner == "player1"
+        result_text = "胜利！" if victory else "失败..."
+        result_color = (100, 255, 100) if victory else (255, 100, 100)
         result_surface = result_font.render(result_text, True, result_color)
-        result_rect = result_surface.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 - 50))
+        result_rect = result_surface.get_rect(center=(WINDOW_WIDTH // 2, int(WINDOW_HEIGHT * 0.3)))
         self.screen.blit(result_surface, result_rect)
-        
-        # 提示文字
-        hint_font = get_font(int(28 * UI_SCALE))
-        hint_text = "按 ESC 返回主菜单"
+
+        info_font = get_font(int(32 * UI_SCALE))
+        reward = self.settlement_data.get("reward", {})
+        gold = reward.get("gold", 0)
+        xp = reward.get("xp", 0)
+        crystals = reward.get("crystals", 0)
+        items = reward.get("items", [])
+        lines = [
+            (f"金币 +{gold}", (255, 220, 120)),
+            (f"经验 +{xp}", (200, 220, 255)),
+        ]
+        if crystals:
+            lines.append((f"水晶 +{crystals}", (255, 180, 90)))
+        for card_info in reward.get("bonus_cards", []) or []:
+            name = card_info.get("name", "未知卡牌")
+            rarity = card_info.get("rarity", "?")
+            lines.append((f"获得卡牌：[{rarity}] {name}", (180, 220, 255)))
+        def _normalize_entries(source):
+            normalized = []
+            if not source:
+                return normalized
+            entries = source if isinstance(source, (list, tuple)) else [source]
+            for item in entries:
+                if isinstance(item, dict):
+                    text = item.get("text") or item.get("label")
+                    color = tuple(item.get("color", (200, 200, 200)))
+                    if text:
+                        normalized.append((text, color))
+                else:
+                    normalized.append((str(item), (200, 200, 200)))
+            return normalized
+
+        lines.extend(_normalize_entries(items))
+        lines.extend(_normalize_entries(reward.get("drops", [])))
+        if not victory:
+            lines.append(("（战败获得安慰经验）", (200, 200, 200)))
+        for idx, (text, color) in enumerate(lines):
+            line_surface = info_font.render(text, True, color)
+            line_rect = line_surface.get_rect(center=(WINDOW_WIDTH // 2, int(WINDOW_HEIGHT * 0.4) + idx * int(40 * UI_SCALE)))
+            self.screen.blit(line_surface, line_rect)
+
+        self.confirm_button.draw(self.screen)
+        hint_font = get_font(int(24 * UI_SCALE))
+        hint_text = "按 ESC 或点击确认返回"
         hint_surface = hint_font.render(hint_text, True, (200, 200, 200))
-        hint_rect = hint_surface.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 + 50))
+        hint_rect = hint_surface.get_rect(center=(WINDOW_WIDTH // 2, int(WINDOW_HEIGHT * 0.75)))
         self.screen.blit(hint_surface, hint_rect)
 
     """====================辅助工具类===================="""
@@ -1222,9 +1501,18 @@ class BattleBaseScene(BaseScene):
         if self.current_turn == "player1":
             target_slots = self.player_waiting_slots
             hand_manager = self.player_hand
+            owner = "player"
         elif self.current_turn == "player2":
             target_slots = self.enemy_waiting_slots
             hand_manager = self.enemy_hand
+            owner = "enemy"
+        else:
+            owner = None
+
+        if owner and self._owner_slots_full(owner):
+            print("战斗区与准备区均已满，自动结束回合")
+            self._auto_skip_turn_if_no_space(owner)
+            return
         
         # 找到第一个空槽位
         target_slot = None
@@ -1249,6 +1537,8 @@ class BattleBaseScene(BaseScene):
             self.cards_played_this_turn += 1 # 增加出牌计数
         else:
             print("准备区已满！")
+            if owner:
+                self._auto_skip_turn_if_no_space(owner)
 
     """====================卡牌移动动画===================="""
     def play_blocking_move_animation(self, card_data, start_rect, end_rect, duration=0.5):
@@ -1421,48 +1711,87 @@ class BattleBaseScene(BaseScene):
                     self.battle_animations.append(slide_anim)
 
     def remove_dead_cards(self):
-        """移除 HP <= 0 的卡牌到弃牌堆"""
-        dead_cards_info = [] # 收集所有死亡卡牌信息
-        
-        # 检查玩家战斗区
-        for slot in self.player_battle_slots:
-            if slot.has_card() and slot.card_data.hp <= 0:
-                dead_cards_info.append({
-                    'card_data': slot.card_data,
-                    'slot': slot,
-                    'owner': 'player',
-                    'discard_slot': self.player_discard_slot
-                })
-        
-        # 检查敌人战斗区
-        for slot in self.enemy_battle_slots:
-            if slot.has_card() and slot.card_data.hp <= 0:
-                dead_cards_info.append({
-                    'card_data': slot.card_data,
-                    'slot': slot,
-                    'owner': 'enemy',
-                    'discard_slot': self.enemy_discard_slot
-                })
-        
-        # 播放阵亡动画
+        """移除 HP <= 0 的卡牌到弃牌堆（支持共享HP的分身）"""
+        dead_cards_info = []
+
+        def collect_dead(slots, owner, discard_slot):
+            grouped = {}
+            for slot in slots:
+                if slot.has_card() and slot.card_data.hp <= 0:
+                    key = id(slot.card_data)
+                    if key not in grouped:
+                        grouped[key] = {
+                            'card_data': slot.card_data,
+                            'slot': slot,
+                            'owner': owner,
+                            'discard_slot': discard_slot,
+                            'linked_slots': [slot]
+                        }
+                        dead_cards_info.append(grouped[key])
+                    else:
+                        grouped[key]['linked_slots'].append(slot)
+
+        collect_dead(self.player_battle_slots, 'player', self.player_discard_slot)
+        collect_dead(self.enemy_battle_slots, 'enemy', self.enemy_discard_slot)
+
         for info in dead_cards_info:
             start_rect = info['slot'].rect.copy()
             end_rect = info['discard_slot'].rect.copy()
-            
+
             self.play_blocking_fade_move_animation(
                 info['card_data'],
                 start_rect,
                 end_rect,
                 duration=0.5
             )
-            info['slot'].remove_card() # 移除卡牌
-            self.add_card_to_discard(info['owner'], info['card_data'])
-            self._handle_post_death_traits(info['card_data'], info['owner'])
 
-    def _handle_post_death_traits(self, card_data, owner):
+            primary_slot = info['slot']
+            primary_slot.remove_card()
+            for linked_slot in info['linked_slots']:
+                if linked_slot is primary_slot:
+                    continue
+                if linked_slot.has_card():
+                    linked_slot.remove_card()
+
+            self.add_card_to_discard(info['owner'], info['card_data'])
+            self._handle_post_death_traits(info['card_data'], info['owner'], slot=primary_slot)
+
+    def _handle_post_death_traits(self, card_data, owner, slot=None):
         traits = getattr(card_data, 'traits', []) or []
         if not traits:
             return
+
+        registry = get_skill_registry()
+        death_context = None
+
+        def ensure_context():
+            nonlocal death_context
+            if death_context is None:
+                death_context = BattleContext(self)
+                if slot:
+                    death_context.set_attacker(slot, owner)
+                else:
+                    death_context.attacker_owner = owner
+                death_context.death_slot = slot
+            return death_context
+
+        for trait in traits:
+            skill = registry.get_skill_by_trait(trait)
+            if not skill:
+                continue
+            effects = skill.get_effects_by_trigger(SkillTrigger.ON_DEATH)
+            if not effects:
+                continue
+            context = ensure_context()
+            for effect in effects:
+                if not effect.can_trigger(context):
+                    continue
+                animation = effect.get_animation(context)
+                executed = effect.execute(context)
+                if executed and animation:
+                    animation.start()
+                    self.battle_animations.append(animation)
+
         if "不死" in traits:
             self._revive_card_to_hand(card_data, owner)
             return
@@ -1476,6 +1805,14 @@ class BattleBaseScene(BaseScene):
             self._update_discard_preview(owner)
             return True
         return False
+
+    def _remove_card_from_other_slots(self, card_data, owner, primary_slot=None):
+        slots = self.player_battle_slots if owner == 'player' else self.enemy_battle_slots
+        for slot in slots:
+            if slot is primary_slot:
+                continue
+            if slot.has_card() and slot.card_data is card_data:
+                slot.remove_card()
 
     def _revive_card_to_hand(self, card_data, owner):
         if not self._remove_card_from_discard(card_data, owner):

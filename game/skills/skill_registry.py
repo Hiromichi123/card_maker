@@ -21,14 +21,21 @@ from game.skills.skill_effects import (
     create_inspire_skill, # 振奋n
     create_group_inspire_skill, # 群体振奋n
     create_curse_skill, # 诅咒n
-        create_break_armor_skill, # 破甲n
+    create_break_armor_skill, # 破甲n
     create_defense_skill, # 防御n
     create_heal_ally_skill, # 治愈n
+    create_group_heal_skill, # 群体治愈n
     create_self_heal_skill, # 恢复n
     create_vampire_skill, # 吸血n
     create_injury_skill, # 受伤n
     create_counter_skill, # 反击n
     create_dodge_skill, # 闪避n
+    create_berserk_skill, # 狂暴
+    create_clone_skill, # 分身
+    create_copy_skill, # 复制
+    create_bombard_skill, # 炮击n
+    create_group_bombard_skill, # 群体爆破n
+    create_explode_on_death_skill, # 爆裂
 )
 
 class SkillRegistry:
@@ -196,6 +203,12 @@ class SkillRegistry:
         if match:
             heal_amount = int(match.group(1))
             return create_heal_ally_skill(heal_amount)
+
+        # 群体治愈n
+        match = re.match(r"群体治愈(\d+)", trait)
+        if match:
+            heal_amount = int(match.group(1))
+            return create_group_heal_skill(heal_amount)
         
         # 恢复n
         match = re.match(r"恢复(\d+)", trait)
@@ -226,6 +239,34 @@ class SkillRegistry:
         if match:
             lvl = int(match.group(1))
             return create_dodge_skill(lvl)
+
+        # 狂暴
+        if trait == "狂暴":
+            return create_berserk_skill()
+
+        # 分身
+        if trait == "分身":
+            return create_clone_skill()
+
+        # 复制
+        if trait == "复制":
+            return create_copy_skill()
+
+        # 炮击n
+        match = re.match(r"炮击(\d+)", trait)
+        if match:
+            damage = int(match.group(1))
+            return create_bombard_skill(damage)
+
+        # 群体爆破n
+        match = re.match(r"群体爆破(\d+)", trait)
+        if match:
+            damage = int(match.group(1))
+            return create_group_bombard_skill(damage)
+
+        # 爆裂
+        if trait == "爆裂":
+            return create_explode_on_death_skill()
         
         return None
     

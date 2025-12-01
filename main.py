@@ -13,25 +13,8 @@ _ensure_working_directory()
 
 import pygame
 import config
-from config import *
-from startup import SplashScreen
+from importlib import import_module
 from ui.transition import Transition
-from scenes.menu import MainMenuScene
-from scenes.gacha.gacha_scene import GachaScene
-from scenes.gacha.gacha_menu import GachaMenuScene
-from scenes.collection import CollectionScene
-from scenes.deck_builder_scene import DeckBuilderScene
-from scenes.activity.activity_scene import ActivityScene
-from scenes.activity.maze_scene import ActivityMazeScene
-from scenes.activity.floor_shop_scene import FloorShopScene
-from scenes.shop_scene import ShopScene
-from scenes.activity.activity_shop_scene import ActivityShopScene
-from scenes.battle_menu import BattleMenuScene
-from scenes.draft_scene import DraftScene
-from scenes.battle.draft_battle import DraftBattleScene
-from scenes.battle.simple_battle import SimpleBattleScene
-from scenes.map.world_map_scene import WorldMapScene
-from scenes.map.chapter_map_scene import ChapterMapScene
 
 """场景管理器"""
 class SceneManager:
@@ -39,15 +22,15 @@ class SceneManager:
         pygame.init()
         # 创建窗口
         self.screen = pygame.display.set_mode((0, 0), 
-                                             pygame.FULLSCREEN | 
-                                             pygame.HWSURFACE | 
-                                             pygame.DOUBLEBUF)
+                             pygame.FULLSCREEN | 
+                             pygame.HWSURFACE | 
+                             pygame.DOUBLEBUF)
         
         # 获取屏幕信息并更新配置
         screen_info = pygame.display.Info()
         config.update_ui_scale(screen_info.current_w, screen_info.current_h)
         
-        pygame.display.set_caption("抽卡模拟器")
+        pygame.display.set_caption("Card Battle Master")
         self.clock = pygame.time.Clock()
         
         # 场景字典
@@ -60,28 +43,36 @@ class SceneManager:
         self.pending_scene = None  # 等待切换的场景
         
         # 启动画面，在淡出完成后再注册场景并切换到主菜单
+        from startup import SplashScreen  # 延迟导入以确保使用更新后的UI配置
         self.splash = SplashScreen()
         # 开始后台加载（loader 在后台线程运行，on_finished 在主线程 splash 完成时调用）
         self.splash.start_loading(loader_func=self._background_load, on_finished=self._on_splash_finished)
 
     """注册部分场景"""
     def register_scenes(self):
-        self._register_scene("main_menu", MainMenuScene, lazy=True)
-        self._register_scene("gacha_menu", GachaMenuScene, lazy=True)
-        self._register_scene("gacha", GachaScene, lazy=True)
-        self._register_scene("collection", CollectionScene, lazy=True)
-        self._register_scene("deck_builder", DeckBuilderScene, lazy=True)
-        self._register_scene("activity_scene", ActivityScene, lazy=True)
-        self._register_scene("activity_maze_scene", ActivityMazeScene, lazy=True)
-        self._register_scene("floor_shop", FloorShopScene, lazy=True)
-        self._register_scene("shop_scene", ShopScene, lazy=True)
-        self._register_scene("activity_shop_scene", ActivityShopScene, lazy=True)
-        self._register_scene("battle_menu", BattleMenuScene, lazy=True)
-        self._register_scene("draft_scene", DraftScene, lazy=True)
-        self._register_scene("draft_battle", DraftBattleScene, lazy=True)
-        self._register_scene("simple_battle", SimpleBattleScene, lazy=True)
-        self._register_scene("world_map", WorldMapScene, lazy=True)
-        self._register_scene("chapter_map", ChapterMapScene, lazy=True)
+        scene_map = {
+            "main_menu": ("scenes.menu", "MainMenuScene"),
+            "gacha_menu": ("scenes.gacha.gacha_menu", "GachaMenuScene"),
+            "gacha": ("scenes.gacha.gacha_scene", "GachaScene"),
+            "collection": ("scenes.collection", "CollectionScene"),
+            "deck_builder": ("scenes.deck_builder_scene", "DeckBuilderScene"),
+            "activity_scene": ("scenes.activity.activity_scene", "ActivityScene"),
+            "activity_maze_scene": ("scenes.activity.maze_scene", "ActivityMazeScene"),
+            "floor_shop": ("scenes.activity.floor_shop_scene", "FloorShopScene"),
+            "shop_scene": ("scenes.shop_scene", "ShopScene"),
+            "activity_shop_scene": ("scenes.activity.activity_shop_scene", "ActivityShopScene"),
+            "workshop_scene": ("scenes.workshop_scene", "WorkshopScene"),
+            "battle_menu": ("scenes.battle_menu", "BattleMenuScene"),
+            "draft_scene": ("scenes.draft_scene", "DraftScene"),
+            "draft_battle": ("scenes.battle.draft_battle", "DraftBattleScene"),
+            "simple_battle": ("scenes.battle.simple_battle", "SimpleBattleScene"),
+            "world_map": ("scenes.map.world_map_scene", "WorldMapScene"),
+            "chapter_map": ("scenes.map.chapter_map_scene", "ChapterMapScene"),
+        }
+        for name, (module_path, class_name) in scene_map.items():
+            module = import_module(module_path)
+            scene_cls = getattr(module, class_name)
+            self._register_scene(name, scene_cls, lazy=True)
 
     def _register_scene(self, scene_name, scene_cls, lazy=False):
         if lazy:
@@ -139,7 +130,7 @@ class SceneManager:
         running = True
 
         while running:
-            dt = self.clock.tick(FPS) / 1000.0
+            dt = self.clock.tick(config.FPS) / 1000.0
 
             # 事件处理：如果splash正在运行优先交给splash处理，否则交给当前场景
             for event in pygame.event.get():
@@ -198,19 +189,18 @@ class SceneManager:
     
     def draw_fps(self):
         """绘制FPS信息"""
-        font = get_font(max(12, int(20 * UI_SCALE)))
+        font = config.get_font(max(12, int(20 * config.UI_SCALE)))
         fps_text = font.render(
             f"FPS: {int(self.clock.get_fps())}", 
             True, (150, 150, 150)
         )
-        self.screen.blit(fps_text, (int(WINDOW_WIDTH * 0.92), int(WINDOW_HEIGHT * 0.02)))
+        self.screen.blit(fps_text, (int(config.WINDOW_WIDTH * 0.92), int(config.WINDOW_HEIGHT * 0.02)))
 
     """===========后台加载==========="""
     def _background_load(self):
         """在后台线程运行"""
         try:
-            import time, os
-            # 示例：预读取 data 下的 json 文件内容（IO-bound，线程安全）
+            # 预读取data的json文件（IO-bound，线程安全）
             data_dir = "data"
             for root, dirs, files in os.walk(data_dir):
                 for fn in files:
@@ -221,20 +211,31 @@ class SceneManager:
                                 _ = f.read()
                         except Exception:
                             pass
-            # 可选：短暂 sleep 模拟 / 等待
-            time.sleep(0.4)
         except Exception as e:
             print("[SceneManager] background load error:", e)
 
     def _on_splash_finished(self):
-        """
-        在主线程由 SplashScreen 在这里注册场景并切换到主菜单（安全地在主线程内执行 pygame 相关操作）。
-        """
-        # 注册所有场景（在主线程执行，避免线程安全问题）
-        self.register_scenes()
-        # 切换到主菜单
-        self.switch_scene("main_menu")
+        """在主线程由 SplashScreen 在这里注册场景并切换到主菜单"""
+        self.register_scenes() # 注册所有场景（在主线程执行，避免线程安全问题）
+        self.switch_scene("main_menu") # 切换到主菜单
 
 if __name__ == "__main__":
+    import ctypes
+
+    # 设置任务栏图标（仅限Windows）
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("cardbattlemaster")
+
+    icon_path = os.path.join("assets", "ui", "card_back.png")
+    if os.path.exists(icon_path):
+        try:
+            icon_surface = pygame.image.load(icon_path)
+            pygame.display.set_icon(icon_surface)
+        except pygame.error as exc:
+            print(f"[Icon] Failed to load {icon_path}: {exc}")
+    else:
+        print(f"[Icon] Missing icon at {icon_path}")
+
+    pygame.display.set_caption("Card Battle Master")
+
     game = SceneManager()
     game.run()

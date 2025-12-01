@@ -1,7 +1,10 @@
 """常规商店场景"""
+import json
 import math
 import os
 import random
+from datetime import datetime
+
 import pygame
 from config import *
 from scenes.base.base_scene import BaseScene
@@ -87,6 +90,14 @@ class ShopScene(BaseScene):
 
         self.shelf_specs = self._build_shelf_specs()
         self.card_offers = {}
+
+        # 每日种子与售罄记录（持久化）
+        self.shop_state_path = os.path.join("data", "shop_state.json")
+        self.daily_seed_key = None
+        self.daily_seed_value = None
+        self.sold_out_cards = set()
+        self._load_shop_state()
+        self._ensure_daily_rng()
         self._populate_card_offers()
 
         self.pack_offers = [definition.copy() for definition in PACK_DEFINITIONS]
@@ -160,14 +171,92 @@ class ShopScene(BaseScene):
         pygame.draw.rect(surf, (80, 80, 120), surf.get_rect(), border_radius=20)
         return surf
 
+    def _current_day_key(self):
+        return datetime.now().strftime("%Y%m%d")
+
+    def _ensure_daily_rng(self):
+        current_key = self._current_day_key()
+        if self.daily_seed_key != current_key:
+            self.daily_seed_key = current_key
+            self.daily_seed_value = self._derive_seed_from_key(current_key)
+            self.sold_out_cards = set()
+            self._save_shop_state()
+        elif self.daily_seed_value is None:
+            self.daily_seed_value = self._derive_seed_from_key(current_key)
+            self._save_shop_state()
+        return random.Random(self.daily_seed_value)
+
+    def _derive_seed_from_key(self, key):
+        try:
+            return int(key)
+        except (TypeError, ValueError):
+            return abs(hash(key)) % (2 ** 31 - 1)
+
+    def _load_shop_state(self):
+        if not os.path.exists(self.shop_state_path):
+            return
+        try:
+            with open(self.shop_state_path, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            self.daily_seed_key = data.get("day_key")
+            self.daily_seed_value = data.get("seed")
+            sold = data.get("sold_out", [])
+            if isinstance(sold, list):
+                self.sold_out_cards = set(sold)
+        except Exception:
+            self.daily_seed_key = None
+            self.daily_seed_value = None
+            self.sold_out_cards = set()
+
+    def _save_shop_state(self):
+        state = {
+            "day_key": self.daily_seed_key,
+            "seed": self.daily_seed_value,
+            "sold_out": sorted(self.sold_out_cards),
+        }
+        try:
+            os.makedirs(os.path.dirname(self.shop_state_path), exist_ok=True)
+            with open(self.shop_state_path, "w", encoding="utf-8") as fh:
+                json.dump(state, fh, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+    def _get_card_identifier(self, card):
+        if not card:
+            return None
+        return getattr(card, "card_id", getattr(card, "name", None))
+
+    def _is_card_sold_out(self, card):
+        identifier = self._get_card_identifier(card)
+        if not identifier:
+            return False
+        return identifier in self.sold_out_cards
+
+    def _mark_card_sold(self, card):
+        identifier = self._get_card_identifier(card)
+        if identifier:
+            self.sold_out_cards.add(identifier)
+
+    def _mark_offer_sold_out(self, offer):
+        offer["sold_out"] = True
+        self._mark_card_sold(offer.get("card"))
+        self._save_shop_state()
+
     def _populate_card_offers(self):
+        rng = self._ensure_daily_rng()
         for key, spec in self.shelf_specs.items():
             min_c, max_c = spec["count_range"]
-            target_count = random.randint(min_c, max_c)
-            offers = self._sample_cards(spec["rarities"], target_count, spec.get("allow_repeat", False))
+            target_count = rng.randint(min_c, max_c)
+            offers = self._sample_cards(
+                spec["rarities"],
+                target_count,
+                spec.get("allow_repeat", False),
+                rng=rng,
+            )
             self.card_offers[key] = offers
 
-    def _sample_cards(self, rarities, count, allow_repeat):
+    def _sample_cards(self, rarities, count, allow_repeat, rng=None):
+        rng = rng or random
         pool = []
         for rarity in rarities:
             pool.extend(self.card_db.get_cards_by_rarity(rarity))
@@ -175,9 +264,9 @@ class ShopScene(BaseScene):
             return []
 
         if allow_repeat or len(pool) < count:
-            selected = [random.choice(pool) for _ in range(count)]
+            selected = [rng.choice(pool) for _ in range(count)]
         else:
-            selected = random.sample(pool, count)
+            selected = rng.sample(pool, count)
 
         offers = []
         for card in selected:
@@ -185,7 +274,8 @@ class ShopScene(BaseScene):
             offers.append({
                 "card": card,
                 "rarity": card.rarity,
-                "price": {"currency": rule["currency"], "amount": rule["amount"]}
+                "price": {"currency": rule["currency"], "amount": rule["amount"]},
+                "sold_out": self._is_card_sold_out(card),
             })
         return offers
 
@@ -318,6 +408,7 @@ class ShopScene(BaseScene):
         card = offer.get("card")
         rarity = offer.get("rarity", "A")
         name = card.name if card else "待补货"
+        sold_out = offer.get("sold_out")
 
         name_surface = self.card_title_font.render(name, True, (255, 255, 255))
         name_rect = name_surface.get_rect(center=(card_rect.centerx, card_rect.y - int(26 * UI_SCALE)))
@@ -329,29 +420,40 @@ class ShopScene(BaseScene):
         image_surface = self._get_card_image(card, card_rect.size)
         self.screen.blit(image_surface, card_rect)
 
+        if sold_out:
+            overlay = pygame.Surface(card_rect.size, pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 170))
+            self.screen.blit(overlay, card_rect.topleft)
+            sold_text = self.card_title_font.render("已售罄", True, (255, 190, 190))
+            sold_rect = sold_text.get_rect(center=card_rect.center)
+            self.screen.blit(sold_text, sold_rect)
+
         stats_text = f"ATK {getattr(card, 'atk', 0)} / HP {getattr(card, 'hp', 0)}"
         stats_surface = self.card_stats_font.render(stats_text, True, (220, 220, 230))
         stats_rect = stats_surface.get_rect(center=(card_rect.centerx, card_rect.bottom + int(18 * UI_SCALE)))
         self.screen.blit(stats_surface, stats_rect)
 
         price_rect = pygame.Rect(card_rect.x, stats_rect.bottom + int(6 * UI_SCALE), card_rect.width, int(44 * UI_SCALE))
-        self._draw_price_button(price_rect, offer["price"], f"购买")
-        self.price_hitboxes.append({"rect": price_rect, "offer": offer, "category": "card"})
+        button_label = "售罄" if sold_out else "购买"
+        self._draw_price_button(price_rect, offer["price"], button_label, disabled=sold_out)
+        if not sold_out:
+            self.price_hitboxes.append({"rect": price_rect, "offer": offer, "category": "card"})
 
         if card:
             self.hoverable_cards.append((card_rect, card))
 
-    def _draw_price_button(self, rect, price, label):
+    def _draw_price_button(self, rect, price, label, disabled=False):
         currency = price.get("currency", "gold")
         amount = price.get("amount", 0)
-        base_color = CURRENCY_COLORS.get(currency, (255, 255, 255))
+        base_color = (170, 170, 170) if disabled else CURRENCY_COLORS.get(currency, (255, 255, 255))
         button_surface = pygame.Surface(rect.size, pygame.SRCALPHA)
         button_surface.fill((*base_color, 30))
         pygame.draw.rect(button_surface, base_color, button_surface.get_rect(), border_radius=20)
         self.screen.blit(button_surface, rect.topleft)
 
-        icon = self.cost_icons.get(currency)
-        text_surface = self.card_stats_font.render(f"{label} {amount}", True, (25, 25, 25))
+        icon = None if disabled else self.cost_icons.get(currency)
+        text_value = label if disabled else f"{label} {amount}"
+        text_surface = self.card_stats_font.render(text_value, True, (25, 25, 25))
         total_width = text_surface.get_width()
         icon_width = icon.get_width() if icon else 0
         gap = int(8 * UI_SCALE) if icon else 0
@@ -508,6 +610,9 @@ class ShopScene(BaseScene):
         return False
 
     def _attempt_purchase(self, offer):
+        if offer.get("sold_out"):
+            self._show_notice("该卡牌已售罄")
+            return
         price = offer["price"]
         currency = price.get("currency", "gold")
         amount = price.get("amount", 0)
@@ -526,6 +631,7 @@ class ShopScene(BaseScene):
             if not self.currency_ui.spend_crystals(amount):
                 self._show_notice("交易失败，请重试")
                 return
+        self._mark_offer_sold_out(offer)
         self._show_notice(f"已购入 {card.name if card else '卡牌'}")
 
     def _attempt_purchase_pack(self, offer):

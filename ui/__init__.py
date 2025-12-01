@@ -2,5 +2,6 @@
 from .button import Button, ImageButton
 from .panel import Panel
 from .transition import Transition
+from .settings_modal import SettingsModal
 
-__all__ = ['Button', 'ImageButton', 'Panel', 'Transition']
+__all__ = ['Button', 'ImageButton', 'Panel', 'Transition', 'SettingsModal']

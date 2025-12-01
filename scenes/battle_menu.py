@@ -6,6 +6,7 @@ from ui.menu_button import MenuButton
 from ui.background import ParallaxBackground
 from ui.system_ui import CurrencyLevelUI
 from ui.activity_poster import PosterUI
+from utils.scene_payload import set_payload
 
 # 海报跳转映射表：index -> scene_name
 poster_to_scene = {
@@ -119,13 +120,13 @@ class BattleMenuScene(BaseScene):
                 "label": "局域网 卡组对战",
                 "color": (200, 70, 50),
                 "hover": (255, 100, 80),
-                "action": lambda: self.switch_to("simple_battle")
+                "action": lambda: self._start_simple_battle("lan_deck")
             },
             {
                 "label": "局域网 任选对战",
                 "color": (200, 90, 50),
                 "hover": (255, 120, 80),
-                "action": lambda: self.switch_to("simple_battle")
+                "action": lambda: self._start_simple_battle("lan_free")
             },
             {
                 "label": "本地 任选对战（双人）",
@@ -161,3 +162,13 @@ class BattleMenuScene(BaseScene):
             return
         scene_name = poster_to_scene.get(idx) # 获取对应场景名称
         self.switch_to(scene_name) # 切换场景
+
+    def _start_simple_battle(self, mode_tag=None):
+        payload = {
+            "return_scene": "battle_menu",
+            "return_payload": {"focus_mode": mode_tag} if mode_tag else None,
+        }
+        if payload["return_payload"] is None:
+            payload.pop("return_payload")
+        set_payload("simple_battle", payload)
+        self.switch_to("simple_battle")

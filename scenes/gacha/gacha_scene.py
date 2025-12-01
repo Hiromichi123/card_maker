@@ -1,30 +1,32 @@
 """抽卡场景"""
 import pygame
-from config import *
+import config
 from ui.button import Button
 from ui.background import ParallaxBackground
 from game.card_system import CardSystem
 from scenes.base.base_scene import BaseScene
 from utils.inventory import get_inventory
 from utils.scene_payload import pop_payload
-from game.gacha_probabilities import simple_prob, get_prob_table
+from scenes.gacha.gacha_probabilities import simple_prob, get_prob_table
 
-CARD_WIDTH = int(360 * UI_SCALE)
-CARD_HEIGHT = int(540 * UI_SCALE)
+def _card_width():
+    return int(360 * config.UI_SCALE)
 
-"""抽卡场景"""
+def _card_height():
+    return int(540 * config.UI_SCALE)
+
 class GachaScene(BaseScene):
     def __init__(self, screen):
         super().__init__(screen)
-        self.background = ParallaxBackground(WINDOW_WIDTH, WINDOW_HEIGHT, "bg/gacha_normal")
-        self.dim_surface = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
+        self.background = ParallaxBackground(config.WINDOW_WIDTH, config.WINDOW_HEIGHT, "bg/gacha_normal")
+        self.dim_surface = pygame.Surface((config.WINDOW_WIDTH, config.WINDOW_HEIGHT), pygame.SRCALPHA)
         self.dim_surface.fill((0, 0, 0, int(255 * 0.2)))
         self.card_system = CardSystem()
         self.inventory = get_inventory()
         
         # 字体
-        self.title_font = get_font(max(32, int(64 * UI_SCALE)))
-        self.info_font = get_font(max(12, int(24 * UI_SCALE)))
+        self.title_font = config.get_font(max(32, int(64 * config.UI_SCALE)))
+        self.info_font = config.get_font(max(12, int(24 * config.UI_SCALE)))
         
         # 当前卡池/概率信息
         self.current_pool_name = "常规卡池"
@@ -64,7 +66,7 @@ class GachaScene(BaseScene):
         self.auto_draw_started = False
 
         bg_type = payload.get("bg_type") or "bg/gacha_normal"
-        self.background = ParallaxBackground(WINDOW_WIDTH, WINDOW_HEIGHT, bg_type)
+        self.background = ParallaxBackground(config.WINDOW_WIDTH, config.WINDOW_HEIGHT, bg_type)
 
         # 重置卡牌展示
         self.card_system.cards = []
@@ -106,8 +108,8 @@ class GachaScene(BaseScene):
                 card_rect = pygame.Rect(
                     card.current_position[0],
                     card.current_position[1],
-                    CARD_WIDTH,
-                    CARD_HEIGHT
+                    _card_width(),
+                    _card_height()
                 )
                 
                 # 检测鼠标是否在卡牌范围内
@@ -126,45 +128,45 @@ class GachaScene(BaseScene):
 
     def draw_title(self):
         """绘制标题"""
-        title_y = int(WINDOW_HEIGHT * 0.04)
+        title_y = int(config.WINDOW_HEIGHT * 0.04)
         title_text = self.title_font.render(self.current_pool_name, True, (255, 215, 0))
-        title_rect = title_text.get_rect(center=(WINDOW_WIDTH // 2, title_y))
+        title_rect = title_text.get_rect(center=(config.WINDOW_WIDTH // 2, title_y))
         
-        shadow_offset = max(2, int(2 * UI_SCALE))
+        shadow_offset = max(2, int(2 * config.UI_SCALE))
         shadow_text = self.title_font.render(self.current_pool_name, True, (0, 0, 0))
-        shadow_rect = shadow_text.get_rect(center=(WINDOW_WIDTH // 2 + shadow_offset, 
+        shadow_rect = shadow_text.get_rect(center=(config.WINDOW_WIDTH // 2 + shadow_offset, 
                                                    title_y + shadow_offset))
         
         self.screen.blit(shadow_text, shadow_rect)
         self.screen.blit(title_text, title_rect)
 
         desc_text = self.info_font.render(self.current_pool_description, True, (210, 210, 210))
-        desc_rect = desc_text.get_rect(center=(WINDOW_WIDTH // 2, title_y + int(40 * UI_SCALE)))
+        desc_rect = desc_text.get_rect(center=(config.WINDOW_WIDTH // 2, title_y + int(40 * config.UI_SCALE)))
         self.screen.blit(desc_text, desc_rect)
 
     def draw_probability_info(self):
         """绘制概率信息"""
         prob_table = self.active_prob_table or simple_prob
-        label_y = int(WINDOW_HEIGHT * 0.82)
+        label_y = int(config.WINDOW_HEIGHT * 0.82)
         label_text = self.info_font.render(self.current_prob_label, True, (255, 255, 255))
-        label_rect = label_text.get_rect(center=(WINDOW_WIDTH // 2, label_y))
+        label_rect = label_text.get_rect(center=(config.WINDOW_WIDTH // 2, label_y))
         self.screen.blit(label_text, label_rect)
 
-        y_offset = int(WINDOW_HEIGHT * 0.88)
-        x_start = int(WINDOW_WIDTH * 0.05)
-        x_spacing = int(WINDOW_WIDTH * 0.12)
+        y_offset = int(config.WINDOW_HEIGHT * 0.88)
+        x_start = int(config.WINDOW_WIDTH * 0.05)
+        x_spacing = int(config.WINDOW_WIDTH * 0.12)
         for idx, (rarity, probability) in enumerate(prob_table.items()):
-            color = COLORS.get(rarity, (255, 255, 255))
+            color = config.COLORS.get(rarity, (255, 255, 255))
             info_text = f"{rarity}({probability}%)"
             text = self.info_font.render(info_text, True, color)
             self.screen.blit(text, (x_start + idx * x_spacing, y_offset))
 
     """==========初始化=========="""
     def _create_back_button(self):
-        button_width = int(360 * UI_SCALE)
-        button_height = int(90 * UI_SCALE)
-        button_x = (WINDOW_WIDTH - button_width) // 2
-        button_y = int(WINDOW_HEIGHT * 0.92)
+        button_width = int(360 * config.UI_SCALE)
+        button_height = int(90 * config.UI_SCALE)
+        button_x = (config.WINDOW_WIDTH - button_width) // 2
+        button_y = int(config.WINDOW_HEIGHT * 0.92)
 
         self.back_button = Button(
             button_x,

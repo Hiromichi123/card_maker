@@ -773,6 +773,56 @@ class HealAnimation(SkillAnimation):
                 pygame.draw.circle(particle_surf, (r, g, b, alpha), (size * 1.5, size * 1.5), size)
                 screen.blit(particle_surf, (int(x - size * 1.5), int(y - size * 1.5)))
 
+class MultiHealAnimation(SkillAnimation):
+    """并行动画：施放一次对多个友方播放治愈光球"""
+    def __init__(self, caster_slot, target_slots, heal_amount):
+        super().__init__()
+        self.animations = [
+            HealAnimation(caster_slot, slot, heal_amount)
+            for slot in target_slots if slot
+        ]
+        self.hit_triggered = False
+
+    def start(self):
+        super().start()
+        if not self.animations:
+            self._trigger_hit()
+            return
+        for anim in self.animations:
+            anim.on_hit = self._trigger_hit
+            anim.on_complete = None
+            anim.start()
+
+    def update(self, dt):
+        if not self.animations:
+            self.finished = True
+            if self.on_complete:
+                self.on_complete()
+            return True
+        all_finished = True
+        for anim in self.animations:
+            if not anim.finished:
+                anim.update(dt)
+                all_finished = False
+        if all_finished:
+            self.finished = True
+            if self.on_complete:
+                self.on_complete()
+            return True
+        return False
+
+    def draw(self, screen):
+        for anim in self.animations:
+            if not anim.finished:
+                anim.draw(screen)
+
+    def _trigger_hit(self):
+        if self.hit_triggered:
+            return
+        self.hit_triggered = True
+        if self.on_hit:
+            self.on_hit()
+
 class SelfHealAnimation(SkillAnimation):
     """恢复动画：直接在自身爆发螺旋上升的光粒子"""
     def __init__(self, target_slot, heal_amount):
@@ -1292,6 +1342,42 @@ class ExplosionAnimation(SkillAnimation):
             return
         rect = self.explosion_image_scaled.get_rect(center=self.target_pos)
         screen.blit(self.explosion_image_scaled, rect)
+
+class MultiExplosionAnimation(SkillAnimation):
+    """在多目标处同时播放爆炸动画"""
+    def __init__(self, target_slots):
+        super().__init__()
+        self.animations = [ExplosionAnimation(slot) for slot in target_slots if slot]
+
+    def start(self):
+        super().start()
+        for anim in self.animations:
+            anim.start()
+            anim.on_hit = None
+            anim.on_complete = None
+
+    def update(self, dt):
+        if not self.animations:
+            self.finished = True
+            if self.on_complete:
+                self.on_complete()
+            return True
+        all_finished = True
+        for anim in self.animations:
+            if not anim.finished:
+                anim.update(dt)
+                all_finished = False
+        if all_finished:
+            self.finished = True
+            if self.on_complete:
+                self.on_complete()
+            return True
+        return False
+
+    def draw(self, screen):
+        for anim in self.animations:
+            if not anim.finished:
+                anim.draw(screen)
 
 """=====免疫、不死、复活====="""
 

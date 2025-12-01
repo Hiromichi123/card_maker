@@ -1,4 +1,5 @@
 """具体的技能效果实现"""
+import copy
 import random
 import re
 from game.skills.skill_base import SkillEffect, SkillTrigger
@@ -120,25 +121,38 @@ class AOEIceEffect(SkillEffect):
             trigger=SkillTrigger.BEFORE_ATTACK
         )
         self.damage = damage
+        self.pending_targets = []
+
+    def _collect_targets(self, context):
+        slots = context.get_all_enemy_slots()
+        valid = [slot for slot in slots if slot and slot.has_card()]
+        self.pending_targets = list(valid)
+        return self.pending_targets
     
     def execute(self, context):
         """对所有敌方造成伤害（使用缓存的目标列表）"""
-        targets = context.skill_targets if hasattr(context, 'skill_targets') and context.skill_targets else context.get_all_enemy_slots()
+        targets = self.pending_targets or self._collect_targets(context)
+        self.pending_targets = []
         success = False
+        actual_targets = []
         for target in targets:
-            if context.deal_damage_to_slot(target, self.damage):
-                success = True
+            if target and target.has_card():
+                if context.deal_damage_to_slot(target, self.damage):
+                    success = True
+                    actual_targets.append(target)
+        context.skill_targets = actual_targets if success else []
         return success
     
     def get_animation(self, context):
         """返回多个冰花动画"""
         from game.skills.skill_animations import MultiIceBloomAnimation
-        
-        targets = context.get_all_enemy_slots()
-        context.skill_targets = targets  # 缓存目标列表
-        if targets:
-            return MultiIceBloomAnimation(targets, self.damage)
-        return None
+
+        targets = self._collect_targets(context)
+        if not targets:
+            context.skill_targets = []
+            return None
+        context.skill_targets = list(targets)
+        return MultiIceBloomAnimation(targets, self.damage)
 
 class AOELightningEffect(SkillEffect):
     """群体闪电效果：对所有敌人造成闪电伤害"""
@@ -389,6 +403,64 @@ class HealAllyEffect(SkillEffect):
         
         return None
 
+class GroupHealEffect(SkillEffect):
+    """群体治愈：对所有友方恢复生命"""
+    def __init__(self, heal_amount):
+        super().__init__(
+            name=f"群体治愈{heal_amount}",
+            description=f"对所有友方恢复{heal_amount}点生命",
+            trigger=SkillTrigger.BEFORE_ATTACK
+        )
+        self.heal_amount = heal_amount
+        self.pending_targets = []
+
+    def _get_allies(self, context):
+        scene = getattr(context, "scene", None)
+        if not scene:
+            return []
+        player_slots = getattr(scene, "player_battle_slots", [])
+        enemy_slots = getattr(scene, "enemy_battle_slots", [])
+        if context.attacker_slot in player_slots:
+            base_slots = player_slots
+        else:
+            base_slots = enemy_slots
+        return [slot for slot in base_slots if slot and slot.has_card()]
+
+    def _collect_healable_allies(self, context):
+        allies = self._get_allies(context)
+        healable = []
+        for slot in allies:
+            card = slot.card_data
+            max_hp = getattr(card, "max_hp", card.hp)
+            if card.hp < max_hp:
+                healable.append(slot)
+        return healable
+
+    def execute(self, context):
+        targets = self.pending_targets or self._collect_healable_allies(context)
+        self.pending_targets = []
+        if not targets:
+            context.skill_targets = []
+            return False
+
+        healed_slots = []
+        for slot in targets:
+            if context.heal_slot(slot, self.heal_amount):
+                healed_slots.append(slot)
+
+        context.skill_targets = healed_slots
+        return bool(healed_slots)
+
+    def get_animation(self, context):
+        from game.skills.skill_animations import MultiHealAnimation
+        targets = self.pending_targets or self._collect_healable_allies(context)
+        self.pending_targets = targets
+        if not targets:
+            context.skill_targets = []
+            return None
+        context.skill_targets = targets
+        return MultiHealAnimation(context.attacker_slot, targets, self.heal_amount)
+
 class SelfHealEffect(SkillEffect):
     """恢复效果：对自己恢复生命"""
     def __init__(self, heal_amount):
@@ -597,6 +669,260 @@ class VampireEffect(SkillEffect):
                 source_pos = slot.rect.center
         return LifeStealAnimation(source_pos, context.attacker_slot, self.last_heal_amount)
 
+"""=====狂暴、分身、炮击、爆裂====="""
+class BerserkEffect(SkillEffect):
+    """狂暴：普通攻击后按自身ATK损失生命，并将损失转化为攻击"""
+    def __init__(self):
+        super().__init__(
+            name="狂暴",
+            description="普通攻击后失去等同自身ATK的生命并获得等量攻击",
+            trigger=SkillTrigger.AFTER_ATTACK
+        )
+        self.last_slot = None
+        self.last_damage = 0
+
+    def can_trigger(self, context):
+        return context.attacker_slot is not None and context.attacker_slot.has_card()
+
+    def execute(self, context):
+        if not self.can_trigger(context):
+            self.last_slot = None
+            return False
+        slot = context.attacker_slot
+        card = slot.card_data
+        damage = max(0, getattr(card, 'atk', 0))
+        if damage <= 0:
+            self.last_slot = None
+            return False
+        old_hp = card.hp
+        if old_hp <= 0:
+            self.last_slot = None
+            return False
+        new_hp = max(0, card.hp - damage)
+        actual_loss = old_hp - new_hp
+        if actual_loss <= 0:
+            self.last_slot = None
+            return False
+        card.hp = new_hp
+        card.atk = getattr(card, 'atk', 0) + actual_loss
+        slot.card_data = card
+        if hasattr(slot, 'start_hp_flash'):
+            slot.start_hp_flash(old_hp, card.hp)
+        self.last_slot = slot
+        self.last_damage = actual_loss
+        return True
+
+    def get_animation(self, context):
+        if not self.last_slot:
+            return None
+        from game.skills.skill_animations import BleedAnimation
+        return BleedAnimation(self.last_slot, self.last_damage)
+
+class CloneEffect(SkillEffect):
+    """分身：入场时复制自身（若有空位）"""
+    def __init__(self):
+        super().__init__(
+            name="分身",
+            description="入场时若有空位复制自身，复制体与本体共享HP",
+            trigger=SkillTrigger.ON_DEPLOY
+        )
+        self.spawned_slot = None
+
+    def _resolve_owner(self, context):
+        if context.attacker_owner:
+            return context.attacker_owner
+        if context.attacker_slot in context.scene.player_battle_slots:
+            return "player"
+        return "enemy"
+
+    def execute(self, context):
+        slot = context.attacker_slot
+        if not slot or not slot.has_card():
+            self.spawned_slot = None
+            return False
+        owner = self._resolve_owner(context)
+        battle_slots = context.scene.player_battle_slots if owner == "player" else context.scene.enemy_battle_slots
+        empty_slot = None
+        for battle_slot in battle_slots:
+            if battle_slot is slot:
+                continue
+            if not battle_slot.has_card():
+                empty_slot = battle_slot
+                break
+        if not empty_slot:
+            self.spawned_slot = None
+            return False
+        empty_slot.set_card(slot.card_data)
+        self.spawned_slot = empty_slot
+        return True
+
+    def get_animation(self, context):
+        return None
+
+class CopyEffect(SkillEffect):
+    """复制：攻击前若有空位复制自身，复制体拥有独立生命"""
+    def __init__(self):
+        super().__init__(
+            name="复制",
+            description="攻击前若有空位复制自身，复制体拥有独立生命",
+            trigger=SkillTrigger.BEFORE_ATTACK
+        )
+        self.spawned_slot = None
+
+    def _resolve_owner(self, context):
+        if context.attacker_owner:
+            return context.attacker_owner
+        if context.attacker_slot in context.scene.player_battle_slots:
+            return "player"
+        return "enemy"
+
+    def _get_first_empty_slot(self, context, owner):
+        scene = getattr(context, "scene", None)
+        if not scene:
+            return None
+
+        if owner == "player":
+            slots = getattr(scene, "player_battle_slots", [])
+        else:
+            slots = getattr(scene, "enemy_battle_slots", [])
+
+        for slot in slots:
+            if slot and not slot.has_card():
+                return slot
+        return None
+
+    def _duplicate_card(self, card):
+        return copy.deepcopy(card)
+
+    def execute(self, context):
+        slot = context.attacker_slot
+        if not slot or not slot.has_card():
+            self.spawned_slot = None
+            return False
+
+        owner = self._resolve_owner(context)
+        scene = getattr(context, "scene", None)
+        if scene and hasattr(scene, "can_use_copy_skill"):
+            if not scene.can_use_copy_skill(owner):
+                self.spawned_slot = None
+                return False
+
+        empty_slot = self._get_first_empty_slot(context, owner)
+        if not empty_slot:
+            self.spawned_slot = None
+            return False
+
+        duplicate = self._duplicate_card(slot.card_data)
+        empty_slot.set_card(duplicate)
+        if scene and hasattr(scene, "mark_copy_skill_used"):
+            scene.mark_copy_skill_used(owner)
+        if hasattr(empty_slot, "start_shake_animation"):
+            empty_slot.start_shake_animation(duration=0.45, intensity=5)
+        self.spawned_slot = empty_slot
+        return True
+
+    def get_animation(self, context):
+        return None
+
+class BombardEffect(SkillEffect):
+    """炮击：对随机敌人造成爆炸伤害"""
+    def __init__(self, damage):
+        super().__init__(
+            name=f"炮击{damage}",
+            description=f"对随机敌人造成{damage}点炮击伤害",
+            trigger=SkillTrigger.BEFORE_ATTACK
+        )
+        self.damage = damage
+        self.last_target = None
+
+    def execute(self, context):
+        target = getattr(context, 'skill_target', None)
+        if not target or not target.has_card():
+            target = context.get_random_enemy_slot()
+            context.skill_target = target
+        if not target or not target.has_card():
+            self.last_target = None
+            return False
+        self.last_target = target
+        return context.deal_damage_to_slot(target, self.damage)
+
+    def get_animation(self, context):
+        target = getattr(context, 'skill_target', None)
+        if not target or not target.has_card():
+            target = context.get_random_enemy_slot()
+            context.skill_target = target
+        if not target:
+            return None
+        self.last_target = target
+        from game.skills.skill_animations import ExplosionAnimation
+        return ExplosionAnimation(target)
+
+class GroupBombardEffect(SkillEffect):
+    """群体爆破：对所有敌方造成炮击伤害"""
+    def __init__(self, damage):
+        super().__init__(
+            name=f"群体爆破{damage}",
+            description=f"对所有敌人造成{damage}点爆破伤害",
+            trigger=SkillTrigger.BEFORE_ATTACK
+        )
+        self.damage = damage
+
+    def execute(self, context):
+        targets = context.skill_targets if hasattr(context, "skill_targets") else None
+        if not targets:
+            targets = context.get_all_enemy_slots()
+            context.skill_targets = targets
+        if not targets:
+            return False
+        success = False
+        for target in targets:
+            if target and target.has_card():
+                if context.deal_damage_to_slot(target, self.damage):
+                    success = True
+        return success
+
+    def get_animation(self, context):
+        from game.skills.skill_animations import MultiExplosionAnimation
+        targets = getattr(context, "skill_targets", None) or context.get_all_enemy_slots()
+        if not targets:
+            return None
+        return MultiExplosionAnimation(targets)
+
+class ExplodeOnDeathEffect(SkillEffect):
+    """爆裂：死亡后对正对面敌人造成伤害"""
+    def __init__(self, damage):
+        super().__init__(
+            name="爆裂",
+            description=f"死亡后对正对面敌人造成{damage}点伤害",
+            trigger=SkillTrigger.ON_DEATH
+        )
+        self.damage = damage
+        self.last_target = None
+
+    def execute(self, context):
+        slot = context.attacker_slot or getattr(context, 'death_slot', None)
+        if not slot:
+            self.last_target = None
+            return False
+        target_slot = context.scene.get_opposite_slot(slot)
+        if not target_slot or not target_slot.has_card():
+            self.last_target = None
+            return False
+        self.last_target = target_slot
+        return context.deal_damage_to_slot(target_slot, self.damage)
+
+    def get_animation(self, context):
+        if not self.last_target:
+            slot = context.attacker_slot or getattr(context, 'death_slot', None)
+            if slot:
+                target_slot = context.scene.get_opposite_slot(slot)
+                if target_slot and target_slot.has_card():
+                    self.last_target = target_slot
+        if not self.last_target:
+            return None
+        from game.skills.skill_animations import ExplosionAnimation
+        return ExplosionAnimation(self.last_target)
+
 def create_defense_skill(reduction): 
     """创建防御技能"""
     from game.skills.skill_base import Skill
@@ -618,6 +944,14 @@ def create_heal_ally_skill(heal_amount):
     
     skill = Skill(f"heal_ally_{heal_amount}", f"治愈{heal_amount}")
     skill.add_effect(HealAllyEffect(heal_amount))
+    return skill
+
+def create_group_heal_skill(heal_amount):
+    """创建群体治愈技能"""
+    from game.skills.skill_base import Skill
+
+    skill = Skill(f"group_heal_{heal_amount}", f"群体治愈{heal_amount}")
+    skill.add_effect(GroupHealEffect(heal_amount))
     return skill
 
 def create_self_heal_skill(heal_amount):
@@ -653,6 +987,48 @@ def create_dodge_skill(level):
     from game.skills.skill_base import Skill
     skill = Skill(f"dodge_{level}", f"闪避{level}")
     skill.add_effect(DodgeEffect(level))
+    return skill
+
+def create_berserk_skill():
+    """创建狂暴技能"""
+    from game.skills.skill_base import Skill
+    skill = Skill("berserk", "狂暴")
+    skill.add_effect(BerserkEffect())
+    return skill
+
+def create_clone_skill():
+    """创建分身技能"""
+    from game.skills.skill_base import Skill
+    skill = Skill("clone_self", "分身")
+    skill.add_effect(CloneEffect())
+    return skill
+
+def create_copy_skill():
+    """创建复制技能"""
+    from game.skills.skill_base import Skill
+    skill = Skill("copy_self", "复制")
+    skill.add_effect(CopyEffect())
+    return skill
+
+def create_bombard_skill(damage):
+    """创建炮击技能"""
+    from game.skills.skill_base import Skill
+    skill = Skill(f"bombard_{damage}", f"炮击{damage}")
+    skill.add_effect(BombardEffect(damage))
+    return skill
+
+def create_group_bombard_skill(damage):
+    """创建群体爆破技能"""
+    from game.skills.skill_base import Skill
+    skill = Skill(f"group_bombard_{damage}", f"群体爆破{damage}")
+    skill.add_effect(GroupBombardEffect(damage))
+    return skill
+
+def create_explode_on_death_skill(damage=2):
+    """创建爆裂技能"""
+    from game.skills.skill_base import Skill
+    skill = Skill(f"explode_on_death_{damage}", "爆裂")
+    skill.add_effect(ExplodeOnDeathEffect(damage))
     return skill
 
 """=====抽卡、还魂、加速、延迟、自毁====="""
@@ -819,9 +1195,11 @@ class SelfDestructEffect(SkillEffect):
             end_rect = discard_slot.rect.copy()
             scene.play_blocking_fade_move_animation(card_data, start_rect, end_rect, duration=0.4)
         slot.remove_card()
+        if hasattr(scene, '_remove_card_from_other_slots'):
+            scene._remove_card_from_other_slots(card_data, owner, primary_slot=slot)
         scene.add_card_to_discard(owner, card_data)
         if hasattr(scene, '_handle_post_death_traits'):
-            scene._handle_post_death_traits(card_data, owner)
+            scene._handle_post_death_traits(card_data, owner, slot=slot)
         return True
 
     def get_animation(self, context):
@@ -960,7 +1338,14 @@ class BlessingEffect(SkillEffect):
     def _get_friendly_slots(self, context):
         owner = self._resolve_owner(context)
         slots = context.scene.player_battle_slots if owner == "player" else context.scene.enemy_battle_slots
-        return [slot for slot in slots if slot and slot.has_card()]
+        valid = [slot for slot in slots if slot and slot.has_card()]
+        attacker_slot = context.attacker_slot if context.attacker_slot in valid else None
+        non_self = [slot for slot in valid if slot is not attacker_slot]
+        if non_self:
+            return non_self
+        if attacker_slot:
+            return [attacker_slot]
+        return []
 
     def _apply_buff(self, slot):
         if not slot or not slot.has_card():

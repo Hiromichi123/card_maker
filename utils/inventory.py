@@ -17,15 +17,21 @@ class Inventory:
         
         self.load() # 加载数据
     
+    def _normalize_path(self, path: str) -> str:
+        if not path:
+            return ""
+        return path.replace("\\", "/")
+
     def add_card(self, card_path, rarity):
         """添加卡牌到库存"""
+        normalized_path = self._normalize_path(card_path)
         card_data = {
-            "path": card_path,
+            "path": normalized_path,
             "rarity": rarity,
         }
         
         self.cards.append(card_data)
-        self.card_count[card_path] += 1
+        self.card_count[normalized_path] += 1
         self.rarity_stats[rarity] += 1
         self.total_draws += 1
         
@@ -91,8 +97,16 @@ class Inventory:
             with open(SAVE_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
-            self.cards = data.get("cards", [])
-            self.card_count = defaultdict(int, data.get("card_count", {}))
+            raw_cards = data.get("cards", [])
+            self.cards = []
+            for card in raw_cards:
+                new_card = dict(card)
+                new_card["path"] = self._normalize_path(card.get("path", ""))
+                self.cards.append(new_card)
+            raw_counts = data.get("card_count", {})
+            self.card_count = defaultdict(int)
+            for path, count in raw_counts.items():
+                self.card_count[self._normalize_path(path)] = int(count)
             self.total_draws = data.get("total_draws", 0)
             self.rarity_stats = defaultdict(int, data.get("rarity_stats", {}))
             
@@ -107,6 +121,35 @@ class Inventory:
         self.total_draws = 0
         self.rarity_stats = defaultdict(int)
         self.save()
+
+    def remove_card(self, card_path, rarity=None):
+        """移除单张卡牌（用于工坊融合等消耗）"""
+        normalized = self._normalize_path(card_path)
+        for idx, card in enumerate(self.cards):
+            if self._normalize_path(card.get("path")) == normalized:
+                removed = self.cards.pop(idx)
+                key = normalized
+                if key in self.card_count:
+                    self.card_count[key] = max(0, self.card_count[key] - 1)
+                    if self.card_count[key] == 0:
+                        del self.card_count[key]
+                card_rarity = rarity or removed.get("rarity")
+                if card_rarity:
+                    self.rarity_stats[card_rarity] = max(0, self.rarity_stats.get(card_rarity, 0) - 1)
+                if self.total_draws > 0:
+                    self.total_draws -= 1
+                return True
+        return False
+
+    def remove_cards(self, card_path, count, rarity=None):
+        """移除多张卡牌，返回实际移除数量"""
+        removed = 0
+        for _ in range(max(0, int(count))):
+            if self.remove_card(card_path, rarity=rarity):
+                removed += 1
+            else:
+                break
+        return removed
 
 
 # 全局库存实例

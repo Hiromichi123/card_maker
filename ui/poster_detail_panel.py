@@ -5,6 +5,7 @@ import os
 import pygame
 from typing import List, Optional
 from config import UI_SCALE, get_font
+from ui.system_ui import DEFAULT_GOLD_ICON, DEFAULT_CRYSTAL_ICON
 
 BACKGROUND_COLOR = (8, 10, 24, 235)
 BORDER_COLOR = (255, 196, 120)
@@ -14,6 +15,10 @@ BODY_COLOR = (220, 220, 230)
 TAG_BG = (255, 215, 120, 40)
 TAG_COLOR = (255, 215, 120)
 REWARD_COLOR = (140, 255, 210)
+GOLD_COLOR = (255, 220, 120)
+CRYSTAL_COLOR = (255, 180, 90)
+XP_COLOR = (200, 220, 255)
+DROP_COLOR = (255, 110, 110)
 
 
 class PosterDetailPanel:
@@ -29,6 +34,9 @@ class PosterDetailPanel:
         self.entry: Optional[dict] = None
         self.visible = False
         self._preview_surface: Optional[pygame.Surface] = None
+        self.icon_size = int(36 * UI_SCALE)
+        self._gold_icon = self._load_icon(DEFAULT_GOLD_ICON)
+        self._crystal_icon = self._load_icon(DEFAULT_CRYSTAL_ICON)
 
     def set_entry(self, entry: dict):
         """Display the provided entry."""
@@ -87,10 +95,30 @@ class PosterDetailPanel:
             text_offset_y = self._draw_multiline(panel, description, text_offset_y)
 
         rewards = self.entry.get("rewards")
-        if rewards:
-            reward_text = "奖励：" + "、".join(rewards)
-            reward_surf = self.body_font.render(reward_text, True, REWARD_COLOR)
-            panel.blit(reward_surf, (self.padding, text_offset_y))
+        reward_segments = self._format_rewards(rewards)
+        if reward_segments:
+            reward_y = text_offset_y
+            label_surf = self.body_font.render("奖励：", True, REWARD_COLOR)
+            panel.blit(label_surf, (self.padding, reward_y))
+            reward_y += label_surf.get_height() + int(8 * UI_SCALE)
+            for segment in reward_segments:
+                text = segment.get("text", "")
+                color = segment.get("color", REWARD_COLOR)
+                icon = segment.get("icon")
+                x = self.padding
+                icon_height = 0
+                if icon:
+                    panel.blit(icon, (x, reward_y))
+                    icon_height = icon.get_height()
+                    x += icon.get_width() + int(10 * UI_SCALE)
+                text_surf = self.body_font.render(text, True, color)
+                text_y = reward_y
+                if icon_height > text_surf.get_height():
+                    text_y += (icon_height - text_surf.get_height()) // 2
+                panel.blit(text_surf, (x, text_y))
+                line_height = max(icon_height, text_surf.get_height())
+                reward_y += line_height + int(6 * UI_SCALE)
+            text_offset_y = reward_y
 
         pygame.draw.rect(panel, BORDER_COLOR, panel.get_rect(), width=3, border_radius=18)
         surface.blit(panel, self.rect.topleft)
@@ -144,3 +172,53 @@ class PosterDetailPanel:
         preview_width = self.rect.width - self.padding * 2
         preview_height = int(self.rect.height * 0.35)
         return pygame.transform.smoothscale(surf, (preview_width, preview_height))
+
+    def _load_icon(self, path: Optional[str]):
+        if not path or not os.path.exists(path):
+            return None
+        try:
+            icon = pygame.image.load(path).convert_alpha()
+            return pygame.transform.smoothscale(icon, (self.icon_size, self.icon_size))
+        except Exception:
+            return None
+
+    def _format_rewards(self, rewards) -> List[dict]:
+        segments: List[dict] = []
+        if not rewards:
+            return segments
+        if isinstance(rewards, dict):
+            gold = rewards.get("gold")
+            crystals = rewards.get("crystals")
+            xp = rewards.get("xp")
+            if gold:
+                segments.append({"text": f"金币 +{gold}", "color": GOLD_COLOR, "icon": self._gold_icon})
+            if xp:
+                segments.append({"text": f"经验 +{xp}", "color": XP_COLOR})
+            if crystals:
+                segments.append({"text": f"水晶 +{crystals}", "color": CRYSTAL_COLOR, "icon": self._crystal_icon})
+            self._append_item_segments(segments, rewards.get("items"))
+            self._append_item_segments(segments, rewards.get("drops"))
+            return segments
+        if isinstance(rewards, (list, tuple)):
+            self._append_item_segments(segments, list(rewards))
+            return segments
+        if isinstance(rewards, str):
+            segments.append({"text": rewards, "color": REWARD_COLOR})
+        return segments
+
+    def _append_item_segments(self, segments: List[dict], items):
+        if not items:
+            return
+        entries = items if isinstance(items, (list, tuple)) else [items]
+        for item in entries:
+            text = None
+            color = REWARD_COLOR
+            if isinstance(item, dict):
+                text = item.get("text") or item.get("label")
+                color = tuple(item.get("color", REWARD_COLOR))
+            else:
+                text = str(item)
+                if "掉落" in text:
+                    color = DROP_COLOR
+            if text:
+                segments.append({"text": text, "color": color})

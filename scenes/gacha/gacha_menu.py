@@ -2,7 +2,8 @@
 import os
 import pygame
 import math
-from config import *
+import config
+cfg = config
 from scenes.base.base_scene import BaseScene
 from ui.background import ParallaxBackground
 from ui.button import Button
@@ -11,17 +12,18 @@ from ui.tooltip import CardTooltip
 from ui.system_ui import CurrencyLevelUI, DEFAULT_GOLD_ICON, DEFAULT_CRYSTAL_ICON
 from utils.card_database import CardDatabase
 from utils.scene_payload import set_payload
-from game.gacha_probabilities import GACHA_POOLS, get_prob_table # 卡池配置
+from scenes.gacha.gacha_probabilities import GACHA_POOLS, get_prob_table # 卡池配置
 
 # 仪表盘属性
 DASHBOARD_ALPHA = 50
 DASHBOARD_ANGLE = 10
-DASHBOARD_START_X = int(WINDOW_WIDTH * 0.02)
+# 仪表盘属性
+DASHBOARD_START_X = int(cfg.WINDOW_WIDTH * 0.02)
 # 仪表盘位置参数
-DASHBOARD_X = int(WINDOW_WIDTH * 0.05)
-DASHBOARD_Y = int(WINDOW_HEIGHT * 0.05)
-DASHBOARD_WIDTH = int(WINDOW_WIDTH * 0.18)
-DASHBOARD_HEIGHT = int(WINDOW_HEIGHT * 0.9)
+DASHBOARD_X = int(cfg.WINDOW_WIDTH * 0.05)
+DASHBOARD_Y = int(cfg.WINDOW_HEIGHT * 0.05)
+DASHBOARD_WIDTH = int(cfg.WINDOW_WIDTH * 0.18)
+DASHBOARD_HEIGHT = int(cfg.WINDOW_HEIGHT * 0.9)
 # 仪表盘按钮参数
 DASHBOARD_BTN_HEIGHT = int(DASHBOARD_HEIGHT * 0.08)
 DASHBOARD_BTN_WIDTH = int(DASHBOARD_WIDTH * 0.8)
@@ -35,7 +37,7 @@ GLOW_INTENSITY_G = 30  # 绿色通道呼吸强度
 GLOW_INTENSITY_B = 30  # 蓝色通道呼吸强度
 
 # 轮盘选中框参数
-HIGHLIGHT_BOX_HEIGHT = int(90 * UI_SCALE)  # 选中框高度
+HIGHLIGHT_BOX_HEIGHT = int(90 * cfg.UI_SCALE)  # 选中框高度
 HIGHLIGHT_GLOW_SPEED = 6  # 选中框呼吸速度
 HIGHLIGHT_BORDER_WIDTH = 3  # 选中框边框宽度
 HIGHLIGHT_BASE_ALPHA = 75  # 选中框基础透明度
@@ -44,19 +46,19 @@ HIGHLIGHT_ALPHA_RANGE = 25  # 选中框透明度呼吸范围
 # 功能按钮位置参数
 BUTTON_X_RATIO = 0.6  # 按钮 X 位置比例（相对窗口宽度）
 BUTTON_Y_RATIO = 0.85  # 按钮 Y 位置比例
-BUTTON_WIDTH = int(250 * UI_SCALE)  # 功能按钮宽度
-BUTTON_HEIGHT = int(80 * UI_SCALE)  # 功能按钮高度
+BUTTON_WIDTH = int(250 * cfg.UI_SCALE)  # 功能按钮宽度
+BUTTON_HEIGHT = int(80 * cfg.UI_SCALE)  # 功能按钮高度
 
 # 卡牌展示区域参数
 SHOWCASE_X_RATIO = 0.45  # 展示区域 X 位置比例
 SHOWCASE_Y_RATIO = 0.30   # 展示区域 Y 位置比例
 SHOWCASE_WIDTH_RATIO = 0.4  # 展示区域宽度比例
 SHOWCASE_HEIGHT_RATIO = 0.6  # 展示区域高度比例
-CARD_WIDTH = int(300 * UI_SCALE)  # 展示卡宽度
-CARD_HEIGHT = int(450 * UI_SCALE)  # 展示卡高度
+CARD_WIDTH = int(300 * cfg.UI_SCALE)  # 展示卡宽度
+CARD_HEIGHT = int(450 * cfg.UI_SCALE)  # 展示卡高度
 CARD_HOVER_SCALE = 1.15  # 悬停时放大倍数
-CARD_HOVER_ELEVATION = int(10 * UI_SCALE)  # 悬停时提升高度
-CARD_SHADOW_OFFSET = int(5 * UI_SCALE)  # 阴影偏移
+CARD_HOVER_ELEVATION = int(10 * cfg.UI_SCALE)  # 悬停时提升高度
+CARD_SHADOW_OFFSET = int(5 * cfg.UI_SCALE)  # 阴影偏移
 
 # 卡牌布局间距参数（相较与卡宽）
 CARD_HORIZONTAL_SPACING_RATIO = 0.3  # 水平排列时卡牌间距比例
@@ -78,9 +80,9 @@ TEN_CRYSTAL_COST = 270
 NOTICE_DURATION = 2.0
 
 # 字体大小
-TITLE_FONT_SIZE = int(80 * UI_SCALE) # 主标题字体大小
-DESC_FONT_SIZE = int(40 * UI_SCALE) # 描述字体大小
-POOL_NAME_FONT_SIZE = int(45 * UI_SCALE) # 卡池名称字体大小
+TITLE_FONT_SIZE = int(80 * cfg.UI_SCALE) # 主标题字体大小
+DESC_FONT_SIZE = int(40 * cfg.UI_SCALE) # 描述字体大小
+POOL_NAME_FONT_SIZE = int(45 * cfg.UI_SCALE) # 卡池名称字体大小
 
 class GachaMenuScene(BaseScene):
     def __init__(self, screen):
@@ -93,22 +95,28 @@ class GachaMenuScene(BaseScene):
 
         self.selected_pool_index = 0  # 选中卡池索引
         self.background = self._create_background_for_pool(self.selected_pool_index)
+        self.prev_background = None
+        self.bg_fade_duration = 0.6
+        self.bg_fade_elapsed = 0.0
+        self.is_bg_fading = False
+        self._bg_surface_current = pygame.Surface((cfg.WINDOW_WIDTH, cfg.WINDOW_HEIGHT), pygame.SRCALPHA)
+        self._bg_surface_previous = pygame.Surface((cfg.WINDOW_WIDTH, cfg.WINDOW_HEIGHT), pygame.SRCALPHA)
         
         # 字体
-        self.title_font = get_font(TITLE_FONT_SIZE)
-        self.desc_font = get_font(DESC_FONT_SIZE)
-        self.pool_name_font = get_font(POOL_NAME_FONT_SIZE)
-        self.notice_font = get_font(int(32 * UI_SCALE))
-        self.cost_font = get_font(int(34 * UI_SCALE))
-        self.cost_icon_size = int(32 * UI_SCALE)
+        self.title_font = cfg.get_font(TITLE_FONT_SIZE)
+        self.desc_font = cfg.get_font(DESC_FONT_SIZE)
+        self.pool_name_font = cfg.get_font(POOL_NAME_FONT_SIZE)
+        self.notice_font = cfg.get_font(int(32 * cfg.UI_SCALE))
+        self.cost_font = cfg.get_font(int(34 * cfg.UI_SCALE))
+        self.cost_icon_size = int(32 * cfg.UI_SCALE)
         self.cost_icons = {
             "gold": self._load_cost_icon(DEFAULT_GOLD_ICON),
             "crystal": self._load_cost_icon(DEFAULT_CRYSTAL_ICON)
         }
         
         # 按钮配置
-        self.button_height = int(120 * UI_SCALE)
-        self.button_spacing = int(20 * UI_SCALE)
+        self.button_height = int(120 * cfg.UI_SCALE)
+        self.button_spacing = int(20 * cfg.UI_SCALE)
 
         # 创建仪表盘视图 添加顶部和底部填充
         top_padding = DASHBOARD_HEIGHT // 2
@@ -153,7 +161,20 @@ class GachaMenuScene(BaseScene):
         """根据卡池索引创建对应的视差背景"""
         if 0 <= pool_index < len(GACHA_POOLS):
             bg_type = GACHA_POOLS[pool_index]["bg_type"]
-        return ParallaxBackground(WINDOW_WIDTH, WINDOW_HEIGHT, bg_type)
+        return ParallaxBackground(cfg.WINDOW_WIDTH, cfg.WINDOW_HEIGHT, bg_type)
+
+    def _start_background_transition(self, new_index):
+        """切换卡池时，触发背景淡入淡出"""
+        new_bg = self._create_background_for_pool(new_index)
+        if self.background:
+            new_bg.offset_x = self.background.offset_x
+            new_bg.offset_y = self.background.offset_y
+            new_bg.target_offset_x = self.background.target_offset_x
+            new_bg.target_offset_y = self.background.target_offset_y
+        self.prev_background = self.background
+        self.background = new_bg
+        self.is_bg_fading = self.prev_background is not None
+        self.bg_fade_elapsed = 0.0
 
     def _load_cost_icon(self, path):
         size = self.cost_icon_size
@@ -242,8 +263,8 @@ class GachaMenuScene(BaseScene):
     
     def _create_buttons(self):
         """创建右侧功能按钮"""
-        button_x = int(WINDOW_WIDTH * BUTTON_X_RATIO)
-        button_y = int(WINDOW_HEIGHT * BUTTON_Y_RATIO)
+        button_x = int(cfg.WINDOW_WIDTH * BUTTON_X_RATIO)
+        button_y = int(cfg.WINDOW_HEIGHT * BUTTON_Y_RATIO)
         spacing = self.button_spacing
 
         # 十连抽按钮
@@ -318,24 +339,24 @@ class GachaMenuScene(BaseScene):
         
         # 少于4张时才使用偏移
         if num_cards < 4:
-            offset_x = int(WINDOW_WIDTH * -0.1)
-            offset_y = int(WINDOW_HEIGHT * -0.1)
+            offset_x = int(cfg.WINDOW_WIDTH * -0.1)
+            offset_y = int(cfg.WINDOW_HEIGHT * -0.1)
         else:
             offset_x = 0
             offset_y = 0
         
-        showcase_x = int(WINDOW_WIDTH * SHOWCASE_X_RATIO) + offset_x
-        showcase_y = int(WINDOW_HEIGHT * SHOWCASE_Y_RATIO) + offset_y
-        showcase_width = int(WINDOW_WIDTH * SHOWCASE_WIDTH_RATIO)
-        showcase_height = int(WINDOW_HEIGHT * SHOWCASE_HEIGHT_RATIO)
+        showcase_x = int(cfg.WINDOW_WIDTH * SHOWCASE_X_RATIO) + offset_x
+        showcase_y = int(cfg.WINDOW_HEIGHT * SHOWCASE_Y_RATIO) + offset_y
+        showcase_width = int(cfg.WINDOW_WIDTH * SHOWCASE_WIDTH_RATIO)
+        showcase_height = int(cfg.WINDOW_HEIGHT * SHOWCASE_HEIGHT_RATIO)
         
         card_width = CARD_WIDTH
         card_height = CARD_HEIGHT
         
         if num_cards < 4:
             # 少量水平排列 - 使用放大尺寸
-            enlarged_width = int(360 * UI_SCALE)
-            enlarged_height = int(540 * UI_SCALE)
+            enlarged_width = int(360 * cfg.UI_SCALE)
+            enlarged_height = int(540 * cfg.UI_SCALE)
             x_spacing = int(enlarged_width * CARD_HORIZONTAL_SPACING_RATIO)  # 等比放大间距
             total_width = num_cards * enlarged_width + (num_cards - 1) * x_spacing if num_cards > 1 else enlarged_width
             start_x = showcase_x + (showcase_width - total_width) // 2
@@ -480,6 +501,8 @@ class GachaMenuScene(BaseScene):
         elif event.type == pygame.MOUSEMOTION:
             # 更新视差背景
             self.background.update_mouse_position(event.pos)
+            if self.prev_background:
+                self.prev_background.update_mouse_position(event.pos)
             
             # 检测卡牌悬停
             mouse_pos = event.pos
@@ -510,6 +533,14 @@ class GachaMenuScene(BaseScene):
         # 更新发光强度
         self.glow_intensity = (math.sin(self.blink_timer * GLOW_SPEED) + 1) / 2  # 0 to 1
         self.background.update(dt)
+        if self.prev_background:
+            self.prev_background.update(dt)
+        if self.is_bg_fading and self.prev_background:
+            self.bg_fade_elapsed += dt
+            if self.bg_fade_elapsed >= self.bg_fade_duration:
+                self.is_bg_fading = False
+                self.prev_background = None
+                self.bg_fade_elapsed = 0.0
         
         # 更新仪表盘视图的呼吸动画
         self.dashboard_view.update(dt)
@@ -548,7 +579,7 @@ class GachaMenuScene(BaseScene):
         # 如果中心项改变，更新选中状态
         if 0 <= center_index < len(GACHA_POOLS) and center_index != self.selected_pool_index:
             self.selected_pool_index = center_index
-            self.background = self._create_background_for_pool(center_index)
+            self._start_background_transition(center_index)
             self._update_pool_button_colors()
             self._update_showcase_cards()  # 更新展示卡牌
         
@@ -563,7 +594,7 @@ class GachaMenuScene(BaseScene):
                 self.currency_notice = ""
 
     def draw(self):
-        self.background.draw(self.screen)
+        self._draw_background()
         self._draw_title()
         self._draw_pool_list()
         
@@ -587,7 +618,7 @@ class GachaMenuScene(BaseScene):
             notice_rect = notice_text.get_rect()
             notice_rect.midtop = (
                 self.ten_draw_button.rect.centerx,
-                self.ten_draw_button.rect.bottom + int(10 * UI_SCALE)
+                    self.ten_draw_button.rect.bottom + int(10 * cfg.UI_SCALE)
             )
 
             bg_rect = pygame.Rect(
@@ -601,11 +632,29 @@ class GachaMenuScene(BaseScene):
             self.screen.blit(bg_surface, bg_rect.topleft)
             self.screen.blit(notice_text, notice_rect)
 
-        self.currency_ui.draw(self.screen, (WINDOW_WIDTH*0.75, WINDOW_HEIGHT*0.03)) # 货币和等级 UI
+        self.currency_ui.draw(self.screen, (cfg.WINDOW_WIDTH*0.75, cfg.WINDOW_HEIGHT*0.03)) # 货币和等级 UI
         
         # 绘制卡牌提示框（最后绘制，在最上层）
         if self.card_tooltip.visible:
             self.card_tooltip.draw(self.screen)
+
+    def _draw_background(self):
+        if self.is_bg_fading and self.prev_background:
+            self._bg_surface_previous.fill((0, 0, 0, 0))
+            self._bg_surface_current.fill((0, 0, 0, 0))
+            self.prev_background.draw(self._bg_surface_previous)
+            self.background.draw(self._bg_surface_current)
+            progress = min(self.bg_fade_elapsed / self.bg_fade_duration, 1.0)
+            prev_alpha = int(255 * (1.0 - progress))
+            curr_alpha = int(255 * progress)
+            self._bg_surface_previous.set_alpha(prev_alpha)
+            self.screen.blit(self._bg_surface_previous, (0, 0))
+            self._bg_surface_previous.set_alpha(255)
+            self._bg_surface_current.set_alpha(curr_alpha)
+            self.screen.blit(self._bg_surface_current, (0, 0))
+            self._bg_surface_current.set_alpha(255)
+        else:
+            self.background.draw(self.screen)
     
     def _draw_title(self):
         """绘制标题：显示当前选中卡池的名称和描述"""
@@ -613,16 +662,16 @@ class GachaMenuScene(BaseScene):
             pool = GACHA_POOLS[self.selected_pool_index]
             
             # 主标题：卡池名称（使用闪烁颜色）
-            title_y = int(WINDOW_HEIGHT * 0.06)
+            title_y = int(cfg.WINDOW_HEIGHT * 0.06)
             blink_color = self._get_blink_color()
             title_text = self.title_font.render(pool["name"], True, blink_color)
-            title_rect = title_text.get_rect(center=(WINDOW_WIDTH // 2, title_y))
+            title_rect = title_text.get_rect(center=(cfg.WINDOW_WIDTH // 2, title_y))
             
             # 阴影
-            shadow_offset = max(2, int(2 * UI_SCALE))
+            shadow_offset = max(2, int(2 * cfg.UI_SCALE))
             shadow_text = self.title_font.render(pool["name"], True, (0, 0, 0))
             shadow_rect = shadow_text.get_rect(center=(
-                WINDOW_WIDTH // 2 + shadow_offset,
+                cfg.WINDOW_WIDTH // 2 + shadow_offset,
                 title_y + shadow_offset
             ))
             
@@ -630,9 +679,9 @@ class GachaMenuScene(BaseScene):
             self.screen.blit(title_text, title_rect)
             
             # 副标题：卡池描述
-            subtitle_y = title_y + int(70 * UI_SCALE)
+            subtitle_y = title_y + int(70 * cfg.UI_SCALE)
             subtitle_text = self.desc_font.render(pool["description"], True, (128, 0, 128))
-            subtitle_rect = subtitle_text.get_rect(center=(WINDOW_WIDTH // 2, subtitle_y))
+            subtitle_rect = subtitle_text.get_rect(center=(cfg.WINDOW_WIDTH // 2, subtitle_y))
             self.screen.blit(subtitle_text, subtitle_rect)
     
     def _draw_pool_list(self):
@@ -650,7 +699,7 @@ class GachaMenuScene(BaseScene):
                 
                 # 如果是高亮选中的按钮，在上层覆盖红色文字
                 if i == self.selected_pool_index:
-                    highlight_font = get_font(int(40 * UI_SCALE))
+                    highlight_font = cfg.get_font(int(40 * cfg.UI_SCALE))
                     highlight_text = highlight_font.render(GACHA_POOLS[i]["name"], True, (255, 25, 25))
                     highlight_rect = highlight_text.get_rect(center=(btn.rect.centerx, btn.rect.centery))
                     surface.blit(highlight_text, highlight_rect)
@@ -703,7 +752,7 @@ class GachaMenuScene(BaseScene):
                     
                     # 悬停发光效果
                     if is_hovered:
-                        rarity_color = COLORS.get(card.rarity, (200, 200, 200))
+                        rarity_color = cfg.COLORS.get(card.rarity, (200, 200, 200))
                         glow_surface = pygame.Surface((draw_rect.width + 20, draw_rect.height + 20), pygame.SRCALPHA)
                         for j in range(3):
                             alpha = 80 - j * 25
@@ -718,13 +767,13 @@ class GachaMenuScene(BaseScene):
                 else:
                     # 如果没有图片路径，绘制占位符
                     placeholder = pygame.Surface((draw_rect.width, draw_rect.height), pygame.SRCALPHA)
-                    rarity_color = COLORS.get(card.rarity, (100, 100, 100))
+                    rarity_color = cfg.COLORS.get(card.rarity, (100, 100, 100))
                     pygame.draw.rect(placeholder, rarity_color, placeholder.get_rect(), border_radius=8)
                     inner_rect = pygame.Rect(3, 3, draw_rect.width - 6, draw_rect.height - 6)
                     pygame.draw.rect(placeholder, (40, 40, 50, 230), inner_rect, border_radius=6)
                     
                     # 显示卡牌名称作为占位
-                    name_font = get_font(max(14, int(20 * UI_SCALE)))
+                    name_font = cfg.get_font(max(14, int(20 * cfg.UI_SCALE)))
                     name_text = name_font.render(card.name[:6], True, (255, 255, 255))
                     name_rect = name_text.get_rect(center=(draw_rect.width // 2, draw_rect.height // 2))
                     placeholder.blit(name_text, name_rect)
@@ -735,7 +784,7 @@ class GachaMenuScene(BaseScene):
                 # 图片加载失败，绘制错误占位符
                 error_surface = pygame.Surface((draw_rect.width, draw_rect.height), pygame.SRCALPHA)
                 pygame.draw.rect(error_surface, (100, 100, 100), error_surface.get_rect(), border_radius=8)
-                error_font = get_font(max(12, int(16 * UI_SCALE)))
+                error_font = cfg.get_font(max(12, int(16 * cfg.UI_SCALE)))
                 error_text = error_font.render("加载失败", True, (255, 100, 100))
                 error_rect = error_text.get_rect(center=(draw_rect.width // 2, draw_rect.height // 2))
                 error_surface.blit(error_text, error_rect)
@@ -747,11 +796,11 @@ class GachaMenuScene(BaseScene):
         color = (255, 215, 0) if affordable else (255, 80, 80)
         text_surface = self.cost_font.render(str(cost), True, color)
         icon = currency_profile.get("icon")
-        gap = int(8 * UI_SCALE) if icon else 0
+        gap = int(8 * cfg.UI_SCALE) if icon else 0
         icon_width = icon.get_width() if icon else 0
         total_width = text_surface.get_width() + icon_width + gap
         base_x = button.rect.centerx - total_width // 2
-        base_y = button.rect.top - text_surface.get_height() - int(12 * UI_SCALE)
+        base_y = button.rect.top - text_surface.get_height() - int(12 * cfg.UI_SCALE)
         self.screen.blit(text_surface, (base_x, base_y))
         if icon:
             icon_y = base_y + (text_surface.get_height() - icon.get_height()) // 2

@@ -61,7 +61,7 @@ class ChapterMapScene(BaseScene):
             chapter_id = WORLD_CHAPTERS[0]["id"]
         self.current_chapter_id = chapter_id
         self.chapter_data = CHAPTER_LOOKUP[chapter_id]
-        self.selected_stage_id = None
+        self.selected_stage_id = payload.get("auto_select_stage")
         self.background = ParallaxBackground(WINDOW_WIDTH, WINDOW_HEIGHT, self.chapter_data.get("bg_type", "bg/world_map"))
         self._build_posters()
         self._sync_stage_selection(auto_fill=True)
@@ -134,7 +134,8 @@ class ChapterMapScene(BaseScene):
         tags = ["精英巡逻"] if index % 2 == 1 else ["资源据点"]
         if index == len(stages) - 1:
             tags.append("BOSS")
-        rewards = stage.get("rewards") or ["角色经验", "战利品宝箱"]
+        reward_info = stage.get("reward")
+        rewards = reward_info or stage.get("rewards") or {"items": ["角色经验", "战利品宝箱"]}
         entry = {
             "title": stage.get("name"),
             "subtitle": f"关卡 {stage.get('id')}",
@@ -151,6 +152,7 @@ class ChapterMapScene(BaseScene):
         stage = next((s for s in self.chapter_data.get("stages", []) if s.get("id") == stage_id), None)
         enemy_path = os.path.join(ENEMY_DECK_ROOT, f"{stage_id}.json")
         stage_name = stage.get("name") if stage else stage_id
+        reward = stage.get("reward") if stage else None
         payload = {
             "stage_id": stage_id,
             "stage_name": stage_name,
@@ -158,6 +160,9 @@ class ChapterMapScene(BaseScene):
             "chapter_name": self.chapter_data.get("name"),
             "background": stage.get("poster") if stage else None,
             "enemy_deck": enemy_path,
+            "stage_reward": reward,
+            "return_scene": "chapter_map",
+            "return_payload": {"chapter_id": self.current_chapter_id, "auto_select_stage": stage_id},
         }
         set_payload("simple_battle", payload)
         self.status_message = f"前往 {stage_id} - {stage_name}"

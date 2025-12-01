@@ -25,6 +25,7 @@ class SimpleBattleScene(BattleBaseScene):
         self.stage_name = ""
         self.default_background_path = self.background_image_path
         self.enemy_stage_dir = ENEMY_STAGE_DIR
+        self.fallback_scene = "battle_menu"
 
         # 工作牌堆（按顺序抽取）
         self.w_pi_player_drale = []
@@ -67,6 +68,9 @@ class SimpleBattleScene(BattleBaseScene):
     
     def handle_event(self, event):
         super().handle_event(event)
+
+        if self.game_over:
+            return
 
         # 只处理玩家的手牌交互
         if self.current_turn == "player1":
@@ -235,6 +239,14 @@ class SimpleBattleScene(BattleBaseScene):
 
         background_path = payload.get("background")
         self._apply_background(background_path)
+        self.stage_reward = payload.get("stage_reward")
+        self.return_scene = (
+            payload.get("return_scene")
+            or payload.get("fallback_scene")
+            or payload.get("origin_scene")
+            or payload.get("from_scene")
+        )
+        self.return_payload = payload.get("return_payload")
 
     def _resolve_enemy_deck_path(self, requested_path=None) -> str:
         candidates = []

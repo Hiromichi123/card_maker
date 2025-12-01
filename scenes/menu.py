@@ -1,13 +1,13 @@
 """主菜单场景"""
 import pygame
+import config
 from config import *
 from scenes.base.base_scene import BaseScene
 from ui.menu_button import MenuButton
 from ui.background import ParallaxBackground
 from ui.system_ui import CurrencyLevelUI
 from ui.activity_poster import PosterUI
-
-GAME_TITLE = "Card Battle Master Simulator v0.8.0"
+from ui.settings_modal import SettingsModal
 
 # 海报跳转映射表：index -> scene_name
 poster_to_scene = {
@@ -21,7 +21,10 @@ poster_topleft = (int(WINDOW_WIDTH * 0.58), int(WINDOW_HEIGHT * 0.6))
 class MainMenuScene(BaseScene):
     def __init__(self, screen):
         super().__init__(screen)
-        
+        self.settings_modal = None
+        self._build_static_ui()
+
+    def _build_static_ui(self):
         # 创建视差背景
         self.background = ParallaxBackground(WINDOW_WIDTH, WINDOW_HEIGHT, "menu")
         
@@ -60,6 +63,9 @@ class MainMenuScene(BaseScene):
         self.quit_flag = True
     
     def handle_event(self, event):
+        if self.settings_modal:
+            self.settings_modal.handle_event(event)
+            return
         # 退出事件
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
@@ -89,17 +95,19 @@ class MainMenuScene(BaseScene):
             if self.notice_timer <= 0:
                 self.notice_timer = 0.0
                 self.notice_message = ""
+        if self.settings_modal:
+            self.settings_modal.update(dt)
     
     def draw(self):
         self.background.draw(self.screen) # 背景
         
         # 绘制标题
-        title_text = self.title_font.render(GAME_TITLE, True, (255, 215, 0))
+        title_text = self.title_font.render(config.GAME_TITLE, True, (255, 215, 0))
         title_rect = title_text.get_rect(center=(WINDOW_WIDTH // 2, int(WINDOW_HEIGHT * 0.12)))
         
         # 标题阴影
         shadow_offset = max(3, int(3 * UI_SCALE))
-        shadow_text = self.title_font.render(GAME_TITLE, True, (0, 0, 0))
+        shadow_text = self.title_font.render(config.GAME_TITLE, True, (0, 0, 0))
         shadow_rect = shadow_text.get_rect(center=(WINDOW_WIDTH // 2 + shadow_offset, 
                                                    int(WINDOW_HEIGHT * 0.12) + shadow_offset))
         self.screen.blit(shadow_text, shadow_rect)
@@ -126,11 +134,30 @@ class MainMenuScene(BaseScene):
             overlay.fill((20, 20, 20, 180))
             self.screen.blit(overlay, bg_rect.topleft)
             self.screen.blit(notice_surface, notice_rect)
+        if self.settings_modal:
+            self.settings_modal.draw(self.screen)
 
     def create_buttons(self):
         self.buttons.clear()
         self._create_primary_buttons()
         self._create_secondary_buttons()
+
+    def open_settings_modal(self):
+        if self.settings_modal:
+            return
+        self.settings_modal = SettingsModal(
+            initial_scale=round(UI_SCALE, 2),
+            on_apply=self._apply_ui_scale_change,
+            on_cancel=self.close_settings_modal
+        )
+
+    def close_settings_modal(self):
+        self.settings_modal = None
+
+    def _apply_ui_scale_change(self, scale_value: float):
+        config.set_ui_scale(scale_value)
+        self.close_settings_modal()
+        self._build_static_ui()
 
     def _create_primary_buttons(self):
         # 战斗按钮
@@ -183,7 +210,7 @@ class MainMenuScene(BaseScene):
             self.button_width, self.button_height,
             "设置",
             color=(150, 100, 255), hover_color=(200, 150, 255), text_color=(25, 25, 25),
-            on_click=lambda: self.switch_to("settings")
+            on_click=self.open_settings_modal
         )
         self.buttons.append(settings_btn)
         
@@ -215,7 +242,8 @@ class MainMenuScene(BaseScene):
             {
                 "label": "工坊",
                 "color": (120, 210, 255),
-                "hover": (170, 240, 255)
+                "hover": (170, 240, 255),
+                "action": lambda: self.switch_to("workshop_scene")
             },
             {
                 "label": "公告",

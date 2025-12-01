@@ -5,11 +5,11 @@ import glob
 import json
 from PIL import Image, ImageDraw, ImageFont
 
-dir = "C+"
-cards_path = "D:\\Github\\card_maker\\assets\\cards\\" + dir
-frame_path = "D:\\Github\\card_maker\\assets\\cards\\frame.png"
-json_path = "D:\\Github\\card_maker\\assets\\cards\\" + dir + "\\cards.json"
-output_path = "D:\\Github\\card_maker\\assets\\outputs\\" + dir
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+CARDS_BASE_PATH = os.path.join(PROJECT_ROOT, "assets", "cards")
+OUTPUT_BASE_PATH = os.path.join(PROJECT_ROOT, "assets", "outputs")
+FRAME_PATH = os.path.join(CARDS_BASE_PATH, "frame.png")
+
 x_offset = 20  # 名称水平偏移量
 y_offset = 50 # 名称向下垂直偏移量
 FONT_SIZE = 50  # 字体大小
@@ -207,15 +207,53 @@ def overlay_card(content_path, frame_path, output_path,
     print("✔ 成功生成:", output_path)
 
 
+def iter_level_directories():
+    if not os.path.isdir(CARDS_BASE_PATH):
+        print(f"未找到卡牌目录: {CARDS_BASE_PATH}")
+        return []
+    candidates = []
+    for entry in sorted(os.listdir(CARDS_BASE_PATH)):
+        dir_path = os.path.join(CARDS_BASE_PATH, entry)
+        if os.path.isdir(dir_path) and os.path.exists(os.path.join(dir_path, "cards.json")):
+            candidates.append(entry)
+    return candidates
 
-if __name__ == "__main__":
+
+def generate_cards_for_directory(dir_name):
+    cards_path = os.path.join(CARDS_BASE_PATH, dir_name)
+    json_path = os.path.join(cards_path, "cards.json")
+    output_path = os.path.join(OUTPUT_BASE_PATH, dir_name)
+
     entries = load_cards_json(json_path)
+    if not entries:
+        print(f"⚠ {dir_name}: 未找到 cards.json 或没有配置，跳过")
+        return
+
     for e in entries:
         cid = e.get('id')
         card_name = e.get('name')
         level = e.get('level')
+        if not cid:
+            continue
+
         card_img = find_card_image(cid, cards_path)
+        if not card_img:
+            print(f"⚠ {dir_name}: 未找到图片 {cid}，跳过")
+            continue
+
         output = os.path.join(output_path, f"{cid}.png")
         if os.path.exists(output):
             continue
-        overlay_card(card_img, frame_path, output, card_name=card_name, level=level)
+
+        overlay_card(card_img, FRAME_PATH, output, card_name=card_name, level=level)
+
+
+
+if __name__ == "__main__":
+    processed_any = False
+    for directory in iter_level_directories():
+        generate_cards_for_directory(directory)
+        processed_any = True
+
+    if not processed_any:
+        print("没有找到需要处理的稀有度目录。")
