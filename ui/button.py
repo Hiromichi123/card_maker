@@ -1,6 +1,4 @@
-"""
-通用按钮组件
-"""
+"""通用按钮组件"""
 import pygame
 from config import UI_SCALE, get_font
 
@@ -10,7 +8,7 @@ class Button:
                  color=(100, 150, 255),
                  hover_color=(130, 180, 255),
                  text_color=(255, 255, 255),
-                 font_size=40,
+                 font_size=36,
                  on_click=None):
 
         self.rect = pygame.Rect(x, y, width, height)
@@ -22,7 +20,7 @@ class Button:
         self.on_click = on_click
         
         # 根据UI缩放调整字体 - 使用中文字体
-        scaled_font_size = max(12, int(font_size * UI_SCALE))
+        scaled_font_size = int(font_size * UI_SCALE)
         self.font = get_font(scaled_font_size)  # 修改这里
         
         # 预渲染文字
@@ -36,6 +34,12 @@ class Button:
         if height is None:
             height = self.rect.height
         self.rect = pygame.Rect(x, y, width, height)
+        self.text_rect = self.text_surface.get_rect(center=self.rect.center)
+
+    def set_text(self, text):
+        """更新按钮文字"""
+        self.text = text
+        self.text_surface = self.font.render(text, True, self.text_color)
         self.text_rect = self.text_surface.get_rect(center=self.rect.center)
         
     def handle_event(self, event):
@@ -52,8 +56,8 @@ class Button:
     def draw(self, screen):
         """绘制按钮"""
         color = self.hover_color if self.is_hovered else self.color
-        border_radius = max(10, int(10 * UI_SCALE))
-        border_width = max(3, int(3 * UI_SCALE))
+        border_radius = int(10 * UI_SCALE)
+        border_width = int(3 * UI_SCALE)
         
         # 绘制按钮背景
         pygame.draw.rect(screen, color, self.rect, border_radius=border_radius)

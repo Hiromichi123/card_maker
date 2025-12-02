@@ -190,6 +190,19 @@ class ActivityMazeScene(BaseScene):
         self.move_duration = 0.45
         self.move_start_pos = pygame.Vector2()
         self.move_end_pos = pygame.Vector2()
+        
+        # Cache title surfaces
+        self._title_cache = None
+        self._subtitle_cache = None
+        self._legend_cache = None
+        self._rebuild_title_cache()
+        
+        # Cache node rendering surfaces
+        self._node_surface_cache = {}  # key: (node_id, explored, hovered, selected)
+        self._node_label_cache = {}    # key: event_text
+        self._connection_surface = None
+        self._connection_cache_dirty = True
+        self._player_orb_cache = {}    # key: radius
 
         self._ensure_data_directory()
         self._load_or_create_maze(force_reload=True)
@@ -198,6 +211,12 @@ class ActivityMazeScene(BaseScene):
         super().enter()
         # 重新加载以读取最新的探索进度
         self._load_or_create_maze(force_reload=True)
+    
+    def _rebuild_title_cache(self):
+        self._title_cache = self.title_font.render("迷宫挑战·第一层", True, (255, 240, 210))
+        shadow_offset = int(4 * UI_SCALE)
+        self._shadow_cache = (self.title_font.render("迷宫挑战·第一层", True, (0, 0, 0)), shadow_offset)
+        self._subtitle_cache = self.info_font.render("点击相邻节点前进，探索记录将自动保存", True, (220, 230, 255))
 
     def handle_event(self, event):
         super().handle_event(event)
@@ -558,6 +577,9 @@ class ActivityMazeScene(BaseScene):
         self._layout_nodes()
         self._focus_on_player()
         self._build_connections()
+        # Mark caches as dirty when maze changes
+        self._connection_cache_dirty = True
+        self._node_surface_cache.clear()
 
     def _enforce_bidirectional_links(self):
         adjacency = {node_id: set() for node_id in self.nodes_by_id.keys()}
@@ -1159,34 +1181,37 @@ class ActivityMazeScene(BaseScene):
     # 绘制
     # ------------------------------------------------------------------
     def _draw_title(self):
-        title = self.title_font.render("迷宫挑战·第一层", True, (255, 240, 210))
-        title_rect = title.get_rect(center=(WINDOW_WIDTH // 2, int(WINDOW_HEIGHT * 0.08)))
-        shadow = self.title_font.render("迷宫挑战·第一层", True, (0, 0, 0))
-        shadow_rect = shadow.get_rect(center=(title_rect.centerx + int(4 * UI_SCALE), title_rect.centery + int(4 * UI_SCALE)))
-        self.screen.blit(shadow, shadow_rect)
-        self.screen.blit(title, title_rect)
-
-        subtitle = self.info_font.render("点击相邻节点前进，探索记录将自动保存", True, (220, 230, 255))
-        subtitle_rect = subtitle.get_rect(center=(WINDOW_WIDTH // 2, int(WINDOW_HEIGHT * 0.13)))
-        self.screen.blit(subtitle, subtitle_rect)
+        if self._title_cache and self._shadow_cache:
+            shadow, shadow_offset = self._shadow_cache
+            title_rect = self._title_cache.get_rect(center=(WINDOW_WIDTH // 2, int(WINDOW_HEIGHT * 0.08)))
+            shadow_rect = shadow.get_rect(center=(title_rect.centerx + shadow_offset, title_rect.centery + shadow_offset))
+            self.screen.blit(shadow, shadow_rect)
+            self.screen.blit(self._title_cache, title_rect)
+        
+        if self._subtitle_cache:
+            subtitle_rect = self._subtitle_cache.get_rect(center=(WINDOW_WIDTH // 2, int(WINDOW_HEIGHT * 0.13)))
+            self.screen.blit(self._subtitle_cache, subtitle_rect)
 
     def _draw_connections(self):
         if not self.connections:
             return
-        line_surface = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
-        for a_id, b_id in self.connections:
-            node_a = self.nodes_by_id.get(a_id)
-            node_b = self.nodes_by_id.get(b_id)
-            if not node_a or not node_b:
-                continue
-            rect_a = node_a.get("top_rect")
-            rect_b = node_b.get("top_rect")
-            if not rect_a or not rect_b:
-                continue
-            start = rect_a.center
-            end = rect_b.center
-            pygame.draw.line(line_surface, (120, 190, 255, 120), start, end, width=max(2, int(3 * UI_SCALE)))
-        self.screen.blit(line_surface, (0, 0))
+        # Cache connection surface
+        if self._connection_cache_dirty or self._connection_surface is None:
+            self._connection_surface = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
+            for a_id, b_id in self.connections:
+                node_a = self.nodes_by_id.get(a_id)
+                node_b = self.nodes_by_id.get(b_id)
+                if not node_a or not node_b:
+                    continue
+                rect_a = node_a.get("top_rect")
+                rect_b = node_b.get("top_rect")
+                if not rect_a or not rect_b:
+                    continue
+                start = rect_a.center
+                end = rect_b.center
+                pygame.draw.line(self._connection_surface, (120, 190, 255, 120), start, end, width=max(2, int(3 * UI_SCALE)))
+            self._connection_cache_dirty = False
+        self.screen.blit(self._connection_surface, (0, 0))
 
     def _draw_nodes(self):
         if not self.nodes:
@@ -1199,15 +1224,23 @@ class ActivityMazeScene(BaseScene):
             color = node["color"]
             alpha = node["alpha"]
             explored = node.get("explored", False)
-
-            # 顶部面
-            top_surface = pygame.Surface(top_rect.size, pygame.SRCALPHA)
-            top_surface.fill((*color, alpha))
-            if not explored:
-                dim = pygame.Surface(top_rect.size, pygame.SRCALPHA)
-                dim.fill((10, 10, 20, 160))
-                top_surface.blit(dim, (0, 0))
-            self.screen.blit(top_surface, top_rect.topleft)
+            node_id = node["id"]
+            is_hovered = node_id == self.hovered_node_id
+            is_selected = node_id == self.selected_target_id
+            
+            # Cache key for this node's appearance
+            cache_key = (node_id, explored, is_hovered, is_selected)
+            if cache_key not in self._node_surface_cache:
+                # Create and cache node surface
+                node_surf = pygame.Surface((top_rect.width, top_rect.height), pygame.SRCALPHA)
+                node_surf.fill((*color, alpha))
+                if not explored:
+                    dim = pygame.Surface(top_rect.size, pygame.SRCALPHA)
+                    dim.fill((10, 10, 20, 160))
+                    node_surf.blit(dim, (0, 0))
+                self._node_surface_cache[cache_key] = node_surf
+            
+            self.screen.blit(self._node_surface_cache[cache_key], top_rect.topleft)
 
             # 立体前侧
             bottom_y = top_rect.bottom
@@ -1220,7 +1253,7 @@ class ActivityMazeScene(BaseScene):
             darker = tuple(max(0, c - 40) for c in color)
             pygame.draw.polygon(self.screen, (*darker, min(255, alpha + 10)), front_points)
 
-            if node["id"] == self.selected_target_id:
+            if is_selected:
                 selected_rect = top_rect.inflate(int(10 * UI_SCALE), int(10 * UI_SCALE))
                 pygame.draw.rect(
                     self.screen,
@@ -1230,7 +1263,7 @@ class ActivityMazeScene(BaseScene):
                 )
 
             # 高亮悬停节点
-            if node["id"] == self.hovered_node_id:
+            if is_hovered:
                 highlight_rect = top_rect.inflate(int(6 * UI_SCALE), int(6 * UI_SCALE))
                 pygame.draw.rect(
                     self.screen,
@@ -1239,8 +1272,11 @@ class ActivityMazeScene(BaseScene):
                     width=max(2, int(3 * UI_SCALE))
                 )
 
-            # 事件文字
-            label = self.small_font.render(node["event"], True, (230, 235, 255))
+            # 事件文字 - 缓存
+            event_text = node["event"]
+            if event_text not in self._node_label_cache:
+                self._node_label_cache[event_text] = self.small_font.render(event_text, True, (230, 235, 255))
+            label = self._node_label_cache[event_text]
             label_rect = label.get_rect(center=(top_rect.centerx, top_rect.bottom + int(self.tile_front * 1.2)))
             self.screen.blit(label, label_rect)
 
@@ -1255,12 +1291,17 @@ class ActivityMazeScene(BaseScene):
         base_radius = int(self.tile_size * 0.18)
         pulse = 1 + 0.12 * math.sin(self.player_orb_phase * 2)
         radius = max(6, int(base_radius * pulse))
-        orb_surface = pygame.Surface((radius * 4, radius * 4), pygame.SRCALPHA)
-        pygame.draw.circle(orb_surface, (80, 255, 180, 60), (radius * 2, radius * 2), radius)
-        pygame.draw.circle(orb_surface, (120, 255, 200, 160), (radius * 2, radius * 2), int(radius * 0.7))
-        pygame.draw.circle(orb_surface, (200, 255, 200, 220), (radius * 2, radius * 2), int(radius * 0.35))
-        orb_rect = orb_surface.get_rect(center=center)
-        self.screen.blit(orb_surface, orb_rect)
+        
+        # Cache orb surface at this radius
+        if radius not in self._player_orb_cache:
+            orb_surface = pygame.Surface((radius * 4, radius * 4), pygame.SRCALPHA)
+            pygame.draw.circle(orb_surface, (80, 255, 180, 60), (radius * 2, radius * 2), radius)
+            pygame.draw.circle(orb_surface, (120, 255, 200, 160), (radius * 2, radius * 2), int(radius * 0.7))
+            pygame.draw.circle(orb_surface, (200, 255, 200, 220), (radius * 2, radius * 2), int(radius * 0.35))
+            self._player_orb_cache[radius] = orb_surface
+        
+        orb_rect = self._player_orb_cache[radius].get_rect(center=center)
+        self.screen.blit(self._player_orb_cache[radius], orb_rect)
 
     def _update_event_card_cycle(self, dt):
         if not self.event_card_entries:

@@ -21,14 +21,16 @@ class SceneManager:
     def __init__(self):
         pygame.init()
         # 创建窗口
-        self.screen = pygame.display.set_mode((0, 0), 
+        self.display = pygame.display.set_mode((0, 0), 
                              pygame.FULLSCREEN | 
                              pygame.HWSURFACE | 
                              pygame.DOUBLEBUF)
         
         # 获取屏幕信息并更新配置
         screen_info = pygame.display.Info()
-        config.update_ui_scale(screen_info.current_w, screen_info.current_h)
+        self._screen_size = (screen_info.current_w, screen_info.current_h)
+        config.initialize_design_resolution(*self._screen_size)
+        config.update_ui_scale(*self._screen_size)
         
         pygame.display.set_caption("Card Battle Master")
         self.clock = pygame.time.Clock()
@@ -37,6 +39,21 @@ class SceneManager:
         self.scenes = {}
         self.scene_factories = {}
         self.current_scene = None
+        self.render_surface = None
+        self.screen = None  # 传递给场景的渲染surface
+        self._raw_mouse_get_pos = pygame.mouse.get_pos
+
+        def _patched_mouse_pos():
+            raw_x, raw_y = self._raw_mouse_get_pos()
+            return (
+                raw_x - config.VIEW_DEST_X + config.VIEW_SRC_X,
+                raw_y - config.VIEW_DEST_Y + config.VIEW_SRC_Y,
+            )
+
+        pygame.mouse.get_pos = _patched_mouse_pos
+        self._patched_mouse_get_pos = _patched_mouse_pos
+        self._handle_scale_change(force=True)
+        self._design_override_active = False
         
         # 转场效果
         self.transition = Transition()
@@ -130,13 +147,16 @@ class SceneManager:
         running = True
 
         while running:
+            design_changed = self._apply_scene_design_policy()
+            self._handle_scale_change(force=design_changed)
             dt = self.clock.tick(config.FPS) / 1000.0
 
             # 事件处理：如果splash正在运行优先交给splash处理，否则交给当前场景
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
+            for raw_event in pygame.event.get():
+                if raw_event.type == pygame.QUIT:
                     running = False
                 else:
+                    event = self._translate_event(raw_event)
                     if hasattr(self, "splash") and self.splash.running:
                         self.splash.handle_event(event)
                     else:
@@ -146,8 +166,10 @@ class SceneManager:
             # 如果 splash 正在运行，则让 splash 接管更新与绘制，然后跳过常规场景逻辑
             if hasattr(self, "splash") and self.splash.running:
                 self.splash.update(dt)
+                self.render_surface.fill(config.BACKGROUND_COLOR)
                 self.splash.draw(self.screen)
-                # 显示 FPS 并翻转缓冲区
+                self._blit_render_surface()
+                self.transition.draw(self.display)
                 self.draw_fps()
                 pygame.display.flip()
                 continue
@@ -171,10 +193,12 @@ class SceneManager:
 
             # 绘制当前场景（含提示框）
             if self.current_scene:
+                self.render_surface.fill(config.BACKGROUND_COLOR)
                 self.current_scene.draw_with_tooltip()
 
-            # 绘制转场效果、FPS
-            self.transition.draw(self.screen)
+            # 绘制到真实屏幕并叠加转场/FPS
+            self._blit_render_surface()
+            self.transition.draw(self.display)
             self.draw_fps()
             pygame.display.flip()
 
@@ -184,6 +208,7 @@ class SceneManager:
         tooltip.stop_monitoring()
 
         # 退出
+        pygame.mouse.get_pos = self._raw_mouse_get_pos
         pygame.quit()
         sys.exit()
     
@@ -194,7 +219,67 @@ class SceneManager:
             f"FPS: {int(self.clock.get_fps())}", 
             True, (150, 150, 150)
         )
-        self.screen.blit(fps_text, (int(config.WINDOW_WIDTH * 0.92), int(config.WINDOW_HEIGHT * 0.02)))
+        draw_x = config.VIEW_DEST_X + int(config.VISIBLE_WIDTH * 0.92)
+        draw_y = config.VIEW_DEST_Y + int(config.VISIBLE_HEIGHT * 0.02)
+        self.display.blit(fps_text, (draw_x, draw_y))
+
+    def _translate_event(self, event):
+        """将鼠标事件转换到渲染区域坐标系"""
+        if hasattr(event, "pos"):
+            adjusted = (
+                event.pos[0] - config.VIEW_DEST_X + config.VIEW_SRC_X,
+                event.pos[1] - config.VIEW_DEST_Y + config.VIEW_SRC_Y
+            )
+            payload = dict(getattr(event, "dict", {}))
+            payload["pos"] = adjusted
+            return pygame.event.Event(event.type, payload)
+        return event
+
+    def _handle_scale_change(self, force=False):
+        """根据配置刷新渲染surface并同步给所有场景"""
+        if not force and not config.SCALE_DIRTY:
+            if self.render_surface is not None:
+                return
+        surface_size = (config.WINDOW_WIDTH, config.WINDOW_HEIGHT)
+        if surface_size[0] <= 0 or surface_size[1] <= 0:
+            return
+        self.render_surface = pygame.Surface(surface_size).convert_alpha()
+        self.render_surface.fill(config.BACKGROUND_COLOR)
+        self.screen = self.render_surface
+        for scene in self.scenes.values():
+            scene.screen = self.render_surface
+        if self.current_scene and self.current_scene not in self.scenes.values():
+            self.current_scene.screen = self.render_surface
+        config.SCALE_DIRTY = False
+
+    def _blit_render_surface(self):
+        if not self.render_surface:
+            return
+        self.display.fill((0, 0, 0))
+        src_rect = pygame.Rect(
+            config.VIEW_SRC_X,
+            config.VIEW_SRC_Y,
+            config.VISIBLE_WIDTH,
+            config.VISIBLE_HEIGHT,
+        )
+        self.display.blit(
+            self.render_surface,
+            (config.VIEW_DEST_X, config.VIEW_DEST_Y),
+            src_rect,
+        )
+
+    def _apply_scene_design_policy(self):
+        """切换场景时根据需要强制原生设计分辨率。"""
+        desired_override = bool(self.current_scene and getattr(self.current_scene, "force_native_resolution", False))
+        if desired_override == self._design_override_active:
+            return False
+        if desired_override:
+            config.set_design_resolution(config.BASE_DESIGN_WIDTH, config.BASE_DESIGN_HEIGHT)
+        else:
+            config.initialize_design_resolution(*self._screen_size)
+        config.update_ui_scale(*self._screen_size)
+        self._design_override_active = desired_override
+        return True
 
     """===========后台加载==========="""
     def _background_load(self):

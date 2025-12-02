@@ -2,17 +2,24 @@
 import json
 import os
 import random
+from utils.card_database import get_card_database
 
 CARD_BASE_PATH = "assets/outputs" # 路径
 # 抽卡概率配置
 CARD_PROBABILITIES = {
-    "SSS": 0.5,  # SSS - 0.5%
-    "SS": 2,     # SS - 2%
-    "S": 4,      # S - 4%
-    "A": 8.5,    # A - 8.5%
-    "B": 15,     # B - 15%
-    "C": 30,     # C - 30%
-    "D": 40      # D - 20%
+    "SSS": 8,
+    "SS+": 8,
+    "SS": 8,
+    "S+": 8,
+    "S": 8,
+    "A+": 8,
+    "A": 8,
+    "B+": 8,
+    "B": 8,
+    "C+": 8,
+    "C": 8,
+    "D": 8,
+    "#elna": 4
 }
 
 """自选卡牌管理类"""
@@ -26,6 +33,7 @@ class DraftManager:
         self.player1_cards = []  # 玩家1（下方）选择的卡牌
         self.player2_cards = []  # 玩家2（上方）选择的卡牌
         self.current_turn = "player1"  # 当前回合 ("player1" 或 "player2")
+        self.card_db = get_card_database()
         
         # 确保数据目录存在
         os.makedirs(os.path.dirname(self.TEMP_FILE), exist_ok=True)
@@ -37,9 +45,9 @@ class DraftManager:
         self.player2_cards = []
         self.current_turn = "player1"
         
-        # 获取所有可用卡牌
-        all_cards = self.get_all_cards()
-        selected_cards = random.sample(all_cards, self.TOTAL_CARDS)
+        # 获取所有可用卡牌并按概率抽取
+        cards_by_rarity = self.get_all_cards()
+        selected_cards = self._select_cards_with_probabilities(cards_by_rarity)
         
         # 创建draft pool
         for card in selected_cards:
@@ -53,22 +61,69 @@ class DraftManager:
         print(f"Draft初始化完成: {len(self.draft_pool)}张卡牌")
     
     def get_all_cards(self):
-        """获取所有可用的卡牌"""
-        all_cards = []
-        
-        for rarity in CARD_PROBABILITIES.keys():
-            rarity_path = os.path.join(CARD_BASE_PATH, rarity)
-            if os.path.exists(rarity_path):
-                files = [f for f in os.listdir(rarity_path) 
+        """获取所有可用的卡牌，按照稀有度分组"""
+        grouped = {}
+
+        if self.card_db:
+            for card in self.card_db.get_all_cards():
+                rarity = card.rarity
+                if not card.image_path:
+                    continue
+                grouped.setdefault(rarity, []).append({
+                    "path": card.image_path.replace('/', os.sep),
+                    "rarity": rarity
+                })
+        else:
+            for rarity in CARD_PROBABILITIES.keys():
+                rarity_path = os.path.join(CARD_BASE_PATH, rarity)
+                if not os.path.exists(rarity_path):
+                    continue
+                files = [f for f in os.listdir(rarity_path)
                         if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
-                
                 for file in files:
-                    all_cards.append({
+                    grouped.setdefault(rarity, []).append({
                         "path": os.path.join(rarity_path, file),
                         "rarity": rarity
                     })
 
-        return all_cards
+        return grouped
+
+    def _select_cards_with_probabilities(self, cards_by_rarity):
+        """根据配置概率抽取目标数量卡牌"""
+        total_available = sum(len(cards) for cards in cards_by_rarity.values())
+        target = min(total_available, self.TOTAL_CARDS)
+        if target <= 0:
+            return []
+
+        pools = {rarity: cards.copy() for rarity, cards in cards_by_rarity.items() if cards}
+        rarities = [r for r in CARD_PROBABILITIES if r in pools and CARD_PROBABILITIES[r] > 0]
+        weights = [CARD_PROBABILITIES[r] for r in rarities]
+
+        selected = []
+        while rarities and len(selected) < target:
+            rarity = random.choices(rarities, weights=weights, k=1)[0]
+            pool = pools.get(rarity)
+            if not pool:
+                idx = rarities.index(rarity)
+                rarities.pop(idx)
+                weights.pop(idx)
+                continue
+            card = pool.pop(random.randrange(len(pool)))
+            selected.append(card)
+            if not pool:
+                idx = rarities.index(rarity)
+                rarities.pop(idx)
+                weights.pop(idx)
+
+        if len(selected) < target:
+            remaining = []
+            for pool in pools.values():
+                remaining.extend(pool)
+            random.shuffle(remaining)
+            needed = target - len(selected)
+            selected.extend(remaining[:needed])
+
+        return selected
     
     def pick_card(self, card_index):
         """选择一张卡牌"""

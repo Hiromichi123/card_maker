@@ -139,6 +139,10 @@ class SplashScreen:
 
         # precreate a transparent overlay surface used for fade
         self._overlay = pygame.Surface((self.width, self.height), flags=pygame.SRCALPHA)
+        
+        # Cache star rendering surface to reduce per-frame creation
+        self._star_surface_cache = None
+        self._star_cache_dirty = True
 
     # ---------- loader handling ----------
     def start_loading(self, loader_func: Optional[Callable[[], None]] = None, on_finished: Optional[Callable[[], None]] = None):
@@ -174,6 +178,9 @@ class SplashScreen:
         # update star field
         for s in self.stars:
             s.update(dt)
+        # Mark star cache dirty every few frames to refresh twinkling
+        if int(self._time * 10) % 3 == 0:
+            self._star_cache_dirty = True
 
         # advance time & manage phases
         self._time += dt
@@ -217,16 +224,16 @@ class SplashScreen:
         # background
         surface.fill(DEFAULT_BG_COLOR)
 
-        # draw stars as small circles using per-star alpha
-        star_surf = pygame.Surface((self.width, self.height), flags=pygame.SRCALPHA)
-        for s in self.stars:
-            a = s.alpha()
-            col = (*STAR_COLOR[:3], a)
-            # draw filled circle
-            r = max(1, int(s.size))
-            pygame.draw.circle(star_surf, col, (int(s.x), int(s.y)), r)
-        # composite stars onto surface
-        surface.blit(star_surf, (0, 0))
+        # draw stars using cached surface
+        if self._star_cache_dirty or self._star_surface_cache is None:
+            self._star_surface_cache = pygame.Surface((self.width, self.height), flags=pygame.SRCALPHA)
+            for s in self.stars:
+                a = s.alpha()
+                col = (*STAR_COLOR[:3], a)
+                r = max(1, int(s.size))
+                pygame.draw.circle(self._star_surface_cache, col, (int(s.x), int(s.y)), r)
+            self._star_cache_dirty = False
+        surface.blit(self._star_surface_cache, (0, 0))
 
         # title text (centered)
         if self._title_surf is None:

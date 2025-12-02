@@ -139,6 +139,11 @@ class CollectionScene(BaseScene):
         self.card_widgets = []
         self.selected_rarity = "全部"  # 当前选择的稀有度筛选
         
+        # 标题缓存
+        self._title_cache = None
+        self._shadow_cache = None
+        self._rebuild_title_cache()
+        
         # 加载卡牌
         self.reload_cards()
     
@@ -295,6 +300,11 @@ class CollectionScene(BaseScene):
         for btn in self.filter_buttons:
             btn.handle_event(event)
     
+    def _rebuild_title_cache(self):
+        self._title_cache = self.title_font.render("卡牌图鉴", True, (255, 215, 0))
+        shadow_offset = max(2, int(2 * UI_SCALE))
+        self._shadow_cache = (self.title_font.render("卡牌图鉴", True, (0, 0, 0)), shadow_offset)
+    
     def update(self, dt):
         """更新"""
         # 更新卡牌悬停状态
@@ -328,17 +338,12 @@ class CollectionScene(BaseScene):
     def draw_title(self):
         """绘制标题"""
         title_y = int(WINDOW_HEIGHT * 0.05)
-        title_text = self.title_font.render("卡牌图鉴", True, (255, 215, 0))
-        title_rect = title_text.get_rect(center=(WINDOW_WIDTH // 2, title_y))
-        
-        shadow_offset = max(2, int(2 * UI_SCALE))
-        shadow_text = self.title_font.render("卡牌图鉴", True, (0, 0, 0))
-        shadow_rect = shadow_text.get_rect(
-            center=(WINDOW_WIDTH // 2 + shadow_offset, title_y + shadow_offset)
-        )
-        
-        self.screen.blit(shadow_text, shadow_rect)
-        self.screen.blit(title_text, title_rect)
+        if self._title_cache and self._shadow_cache:
+            shadow_text, shadow_offset = self._shadow_cache
+            title_rect = self._title_cache.get_rect(center=(WINDOW_WIDTH // 2, title_y))
+            shadow_rect = shadow_text.get_rect(center=(WINDOW_WIDTH // 2 + shadow_offset, title_y + shadow_offset))
+            self.screen.blit(shadow_text, shadow_rect)
+            self.screen.blit(self._title_cache, title_rect)
     
     def draw_stats_panel(self):
         """绘制统计面板"""

@@ -37,91 +37,33 @@ class PosterDetailPanel:
         self.icon_size = int(36 * UI_SCALE)
         self._gold_icon = self._load_icon(DEFAULT_GOLD_ICON)
         self._crystal_icon = self._load_icon(DEFAULT_CRYSTAL_ICON)
+        self._panel_cache: Optional[pygame.Surface] = None
+        self._cache_dirty = True
 
     def set_entry(self, entry: dict):
         """Display the provided entry."""
-        self.entry = entry or {}
-        self.visible = bool(entry)
-        self._preview_surface = self._load_preview(entry.get("preview")) if entry else None
+        new_entry = entry or {}
+        # Only mark dirty if entry content actually changed
+        if self.entry != new_entry:
+            self.entry = new_entry
+            self.visible = bool(entry)
+            self._preview_surface = self._load_preview(entry.get("preview")) if entry else None
+            self._cache_dirty = True
 
     def hide(self):
         self.entry = None
         self.visible = False
         self._preview_surface = None
+        self._panel_cache = None
+        self._cache_dirty = True
 
     def draw(self, surface: pygame.Surface):
         if not self.visible or not self.entry:
             return
-
-        panel = pygame.Surface((self.rect.width, self.rect.height), pygame.SRCALPHA)
-        panel.fill(BACKGROUND_COLOR)
-
-        if self._preview_surface:
-            preview_rect = self._preview_surface.get_rect()
-            preview_rect.topleft = (self.padding, self.padding)
-            panel.blit(self._preview_surface, preview_rect)
-            text_offset_y = preview_rect.bottom + self.padding
-        else:
-            text_offset_y = self.padding
-
-        title = self.entry.get("title", "")
-        if title:
-            title_surface = self.title_font.render(title, True, TITLE_COLOR)
-            panel.blit(title_surface, (self.padding, text_offset_y))
-            text_offset_y += title_surface.get_height() + int(10 * UI_SCALE)
-
-        subtitle = self.entry.get("subtitle") or self.entry.get("difficulty")
-        if subtitle:
-            subtitle_surf = self.subtitle_font.render(subtitle, True, SUBTITLE_COLOR)
-            panel.blit(subtitle_surf, (self.padding, text_offset_y))
-            text_offset_y += subtitle_surf.get_height() + int(10 * UI_SCALE)
-
-        tags = self._collect_tags()
-        if tags:
-            tag_x = self.padding
-            tag_height = self.tag_font.get_height() + int(8 * UI_SCALE)
-            for tag in tags:
-                tag_surface = pygame.Surface((self.tag_font.size(tag)[0] + int(20 * UI_SCALE), tag_height), pygame.SRCALPHA)
-                tag_surface.fill(TAG_BG)
-                text = self.tag_font.render(tag, True, TAG_COLOR)
-                text_rect = text.get_rect(center=(tag_surface.get_width() // 2, tag_surface.get_height() // 2))
-                tag_surface.blit(text, text_rect)
-                panel.blit(tag_surface, (tag_x, text_offset_y))
-                tag_x += tag_surface.get_width() + int(12 * UI_SCALE)
-            text_offset_y += tag_height + int(12 * UI_SCALE)
-
-        description = self.entry.get("description")
-        if description:
-            text_offset_y = self._draw_multiline(panel, description, text_offset_y)
-
-        rewards = self.entry.get("rewards")
-        reward_segments = self._format_rewards(rewards)
-        if reward_segments:
-            reward_y = text_offset_y
-            label_surf = self.body_font.render("奖励：", True, REWARD_COLOR)
-            panel.blit(label_surf, (self.padding, reward_y))
-            reward_y += label_surf.get_height() + int(8 * UI_SCALE)
-            for segment in reward_segments:
-                text = segment.get("text", "")
-                color = segment.get("color", REWARD_COLOR)
-                icon = segment.get("icon")
-                x = self.padding
-                icon_height = 0
-                if icon:
-                    panel.blit(icon, (x, reward_y))
-                    icon_height = icon.get_height()
-                    x += icon.get_width() + int(10 * UI_SCALE)
-                text_surf = self.body_font.render(text, True, color)
-                text_y = reward_y
-                if icon_height > text_surf.get_height():
-                    text_y += (icon_height - text_surf.get_height()) // 2
-                panel.blit(text_surf, (x, text_y))
-                line_height = max(icon_height, text_surf.get_height())
-                reward_y += line_height + int(6 * UI_SCALE)
-            text_offset_y = reward_y
-
-        pygame.draw.rect(panel, BORDER_COLOR, panel.get_rect(), width=3, border_radius=18)
-        surface.blit(panel, self.rect.topleft)
+        if self._cache_dirty or self._panel_cache is None:
+            self._rebuild_cache()
+        if self._panel_cache:
+            surface.blit(self._panel_cache, self.rect.topleft)
 
     def _draw_multiline(self, panel: pygame.Surface, description: str, start_y: int) -> int:
         use_space = " " in description
@@ -222,3 +164,75 @@ class PosterDetailPanel:
                     color = DROP_COLOR
             if text:
                 segments.append({"text": text, "color": color})
+
+    def _rebuild_cache(self):
+        panel = pygame.Surface((self.rect.width, self.rect.height), pygame.SRCALPHA)
+        panel.fill(BACKGROUND_COLOR)
+
+        if self._preview_surface:
+            preview_rect = self._preview_surface.get_rect()
+            preview_rect.topleft = (self.padding, self.padding)
+            panel.blit(self._preview_surface, preview_rect)
+            text_offset_y = preview_rect.bottom + self.padding
+        else:
+            text_offset_y = self.padding
+
+        title = self.entry.get("title", "")
+        if title:
+            title_surface = self.title_font.render(title, True, TITLE_COLOR)
+            panel.blit(title_surface, (self.padding, text_offset_y))
+            text_offset_y += title_surface.get_height() + int(10 * UI_SCALE)
+
+        subtitle = self.entry.get("subtitle") or self.entry.get("difficulty")
+        if subtitle:
+            subtitle_surf = self.subtitle_font.render(subtitle, True, SUBTITLE_COLOR)
+            panel.blit(subtitle_surf, (self.padding, text_offset_y))
+            text_offset_y += subtitle_surf.get_height() + int(10 * UI_SCALE)
+
+        tags = self._collect_tags()
+        if tags:
+            tag_x = self.padding
+            tag_height = self.tag_font.get_height() + int(8 * UI_SCALE)
+            for tag in tags:
+                tag_surface = pygame.Surface((self.tag_font.size(tag)[0] + int(20 * UI_SCALE), tag_height), pygame.SRCALPHA)
+                tag_surface.fill(TAG_BG)
+                text = self.tag_font.render(tag, True, TAG_COLOR)
+                text_rect = text.get_rect(center=(tag_surface.get_width() // 2, tag_surface.get_height() // 2))
+                tag_surface.blit(text, text_rect)
+                panel.blit(tag_surface, (tag_x, text_offset_y))
+                tag_x += tag_surface.get_width() + int(12 * UI_SCALE)
+            text_offset_y += tag_height + int(12 * UI_SCALE)
+
+        description = self.entry.get("description")
+        if description:
+            text_offset_y = self._draw_multiline(panel, description, text_offset_y)
+
+        rewards = self.entry.get("rewards")
+        reward_segments = self._format_rewards(rewards)
+        if reward_segments:
+            reward_y = text_offset_y
+            label_surf = self.body_font.render("奖励：", True, REWARD_COLOR)
+            panel.blit(label_surf, (self.padding, reward_y))
+            reward_y += label_surf.get_height() + int(8 * UI_SCALE)
+            for segment in reward_segments:
+                text = segment.get("text", "")
+                color = segment.get("color", REWARD_COLOR)
+                icon = segment.get("icon")
+                x = self.padding
+                icon_height = 0
+                if icon:
+                    panel.blit(icon, (x, reward_y))
+                    icon_height = icon.get_height()
+                    x += icon.get_width() + int(10 * UI_SCALE)
+                text_surf = self.body_font.render(text, True, color)
+                text_y = reward_y
+                if icon_height > text_surf.get_height():
+                    text_y += (icon_height - text_surf.get_height()) // 2
+                panel.blit(text_surf, (x, text_y))
+                line_height = max(icon_height, text_surf.get_height())
+                reward_y += line_height + int(6 * UI_SCALE)
+            text_offset_y = reward_y
+
+        pygame.draw.rect(panel, BORDER_COLOR, panel.get_rect(), width=3, border_radius=18)
+        self._panel_cache = panel
+        self._cache_dirty = False

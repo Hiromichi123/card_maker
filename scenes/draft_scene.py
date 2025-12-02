@@ -5,7 +5,7 @@ from scenes.base.base_scene import BaseScene
 from ui.button import Button
 from ui.panel import Panel
 from utils.draft_manager import get_draft_manager
-from utils.card_database import get_card_database
+from utils.card_database import get_card_database, CardData
 from config import *
 
 # ==================== Draft场景配置 ====================
@@ -147,6 +147,7 @@ class DraftScene(BaseScene):
         self.draft_cards = [] # Draft卡牌列表
         self.create_ui() # 创建UI
         self.initialized = False # 是否已初始化
+        self.ai_enabled = False
     
     def load_background(self):
         """加载背景"""
@@ -248,6 +249,21 @@ class DraftScene(BaseScene):
             font_size=24,
             on_click=lambda: self.switch_to("main_menu")
         )
+
+        # AI开关按钮
+        ai_button_width = int(180 * UI_SCALE)
+        ai_button_height = int(48 * UI_SCALE)
+        self.ai_toggle_button = Button(
+            int(WINDOW_WIDTH * 0.78),
+            int(WINDOW_HEIGHT * 0.02),
+            ai_button_width,
+            ai_button_height,
+            "上方AI: 关",
+            color=(80, 120, 200),
+            hover_color=(120, 160, 235),
+            font_size=24,
+            on_click=self._toggle_ai
+        )
     
     def initialize_draft_cards(self):
         """初始化Draft卡牌显示"""
@@ -319,7 +335,7 @@ class DraftScene(BaseScene):
         # 鼠标点击
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             mouse_pos = event.pos
-            
+
             for card in self.draft_cards:
                 if not card.is_picked and card.rect.collidepoint(mouse_pos):
                     # 选择卡牌
@@ -327,13 +343,14 @@ class DraftScene(BaseScene):
                     if self.draft_manager.pick_card(card.index):
                         card.is_picked = True
                         card.picked_by = picking_player
-                        
+
                         # 检查是否完成
                         if self.draft_manager.is_draft_complete():
                             self.on_draft_complete()
                     break
-        
-        # 按钮事件
+
+        # 按钮事件（放在卡牌处理之后，确保任意事件都能更新按钮状态）
+        self.ai_toggle_button.handle_event(event)
         self.back_button.handle_event(event)
     
     def on_draft_complete(self):
@@ -350,6 +367,8 @@ class DraftScene(BaseScene):
         # 更新卡牌动画
         for card in self.draft_cards:
             card.update(dt)
+
+        self._maybe_run_ai_turn()
     
     def draw(self):
         """绘制"""
@@ -365,6 +384,7 @@ class DraftScene(BaseScene):
             card.draw(self.screen)
         
         self.draw_turn_indicator() # 回合指示器
+        self.ai_toggle_button.draw(self.screen)
         self.back_button.draw(self.screen) # 按钮
     
     def draw_info_panel(self):
@@ -476,3 +496,34 @@ class DraftScene(BaseScene):
         self.screen.blit(bg, (indicator_rect.x - bg_padding, indicator_rect.y - bg_padding // 2))
         
         self.screen.blit(indicator, indicator_rect)
+
+    def _toggle_ai(self):
+        """切换AI控制"""
+        self.ai_enabled = not self.ai_enabled
+        label = "上方AI: 开" if self.ai_enabled else "上方AI: 关"
+        self.ai_toggle_button.set_text(label)
+
+    def _maybe_run_ai_turn(self):
+        """在开启AI时让上方玩家自动选牌"""
+        if not self.initialized or not self.ai_enabled:
+            return
+        if self.draft_manager.current_turn != "player2":
+            return
+        best_card = self._find_best_available_card()
+        if not best_card:
+            return
+        if self.draft_manager.pick_card(best_card.index):
+            best_card.is_picked = True
+            best_card.picked_by = "player2"
+            if self.draft_manager.is_draft_complete():
+                self.on_draft_complete()
+
+    def _find_best_available_card(self):
+        available = [card for card in self.draft_cards if not card.is_picked]
+        if not available:
+            return None
+        return max(available, key=lambda card: (self._rarity_rank(card.data.get("rarity")), -card.index))
+
+    def _rarity_rank(self, rarity):
+        level = CardData.RARITY_TO_LEVEL.get(rarity, 99)
+        return -level

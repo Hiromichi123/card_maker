@@ -24,10 +24,21 @@ CARD_PROBABILITIES = {
     "D": 40.0
 }
 
-# 抽卡参数
-CARD_WIDTH = 360  #原720
-CARD_HEIGHT = 540 #原1080
-CARD_SPACING = 40
+# 抽卡参数（设计分辨率尺寸）
+BASE_CARD_WIDTH = 360  # 原720
+BASE_CARD_HEIGHT = 540 # 原1080
+BASE_CARD_SPACING = 40
+CARD_WIDTH = BASE_CARD_WIDTH
+CARD_HEIGHT = BASE_CARD_HEIGHT
+CARD_SPACING = BASE_CARD_SPACING
+
+def apply_card_scale(scale):
+    """按照可见区域缩放抽卡卡牌尺寸。"""
+    global CARD_WIDTH, CARD_HEIGHT, CARD_SPACING
+    factor = max(0.4, min(1.2, float(scale)))
+    CARD_WIDTH = max(80, int(BASE_CARD_WIDTH * factor))
+    CARD_HEIGHT = max(120, int(BASE_CARD_HEIGHT * factor))
+    CARD_SPACING = max(12, int(BASE_CARD_SPACING * factor))
 CARDS_PER_ROW = 5
 TOTAL_CARDS = 10
 # 动画设置
@@ -394,8 +405,10 @@ class CardSystem:
         """单抽"""
         card_pool = self.get_card_pool(prob=prob)
         level_dir, card_path = self.draw_single_card(card_pool, prob=prob)
-        position = ((cfg.WINDOW_WIDTH - CARD_WIDTH) // 2, 
-                (cfg.WINDOW_HEIGHT - CARD_HEIGHT) // 2)
+        surface_w = max(1, cfg.VISIBLE_WIDTH)
+        surface_h = max(1, cfg.VISIBLE_HEIGHT)
+        position = ((surface_w - CARD_WIDTH) // 2, 
+            (surface_h - CARD_HEIGHT) // 2)
         card = Card(card_path, level_dir, position, 0)
         self.cards = [card]
         self.animation_start_time = 0
@@ -414,9 +427,11 @@ class CardSystem:
             row = i // CARDS_PER_ROW
             col = i % CARDS_PER_ROW
             
+            surface_w = max(1, cfg.VISIBLE_WIDTH)
+            surface_h = max(1, cfg.VISIBLE_HEIGHT)
             total_width = CARDS_PER_ROW * CARD_WIDTH + (CARDS_PER_ROW - 1) * CARD_SPACING
-            start_x = (cfg.WINDOW_WIDTH - total_width) // 2
-            start_y = int(cfg.WINDOW_HEIGHT * 0.15) + row * (CARD_HEIGHT + CARD_SPACING)
+            start_x = (surface_w - total_width) // 2
+            start_y = int(surface_h * 0.15) + row * (CARD_HEIGHT + CARD_SPACING)
             
             position = (start_x + col * (CARD_WIDTH + CARD_SPACING), start_y)
             

@@ -118,7 +118,11 @@ class GachaMenuScene(BaseScene):
         self.button_height = int(120 * cfg.UI_SCALE)
         self.button_spacing = int(20 * cfg.UI_SCALE)
 
-        # 创建仪表盘视图 添加顶部和底部填充
+        # 缓存标题surface
+        self._title_cache = {}
+        self._shadow_cache = {}
+
+        # 创建仪表板视图 添加顶部和底部填充
         top_padding = DASHBOARD_HEIGHT // 2
         bottom_padding = DASHBOARD_HEIGHT // 2
         buttons_height = len(GACHA_POOLS) * (self.button_height + self.button_spacing)
@@ -256,7 +260,7 @@ class GachaMenuScene(BaseScene):
                 color=color,
                 hover_color=(80, 120, 180),
                 text_color=(255, 255, 255),
-                font_size=28,
+                font_size=int(28*cfg.UI_SCALE),
                 on_click=None
             )
             self.dashboard_buttons.append(btn)
@@ -664,12 +668,19 @@ class GachaMenuScene(BaseScene):
             # 主标题：卡池名称（使用闪烁颜色）
             title_y = int(cfg.WINDOW_HEIGHT * 0.06)
             blink_color = self._get_blink_color()
-            title_text = self.title_font.render(pool["name"], True, blink_color)
+            
+            # 缓存检查：仅在名字和颜色变化时重建
+            cache_key = (pool["name"], blink_color)
+            if cache_key not in self._title_cache:
+                self._title_cache[cache_key] = self.title_font.render(pool["name"], True, blink_color)
+                shadow_offset = max(2, int(2 * cfg.UI_SCALE))
+                self._shadow_cache[cache_key] = (self.title_font.render(pool["name"], True, (0, 0, 0)), shadow_offset)
+            
+            title_text = self._title_cache[cache_key]
             title_rect = title_text.get_rect(center=(cfg.WINDOW_WIDTH // 2, title_y))
             
             # 阴影
-            shadow_offset = max(2, int(2 * cfg.UI_SCALE))
-            shadow_text = self.title_font.render(pool["name"], True, (0, 0, 0))
+            shadow_text, shadow_offset = self._shadow_cache[cache_key]
             shadow_rect = shadow_text.get_rect(center=(
                 cfg.WINDOW_WIDTH // 2 + shadow_offset,
                 title_y + shadow_offset

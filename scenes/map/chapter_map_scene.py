@@ -47,7 +47,7 @@ class ChapterMapScene(BaseScene):
             "返回上一级",
             color=(90, 90, 90),
             hover_color=(130, 130, 130),
-            font_size=42,
+            font_size=int(42*UI_SCALE),
             on_click=lambda: self.switch_to("world_map"),
         )
         self._build_posters()

@@ -19,12 +19,12 @@ class ParallaxBackground:
         # 加载或创建背景
         self.background = self.create_background()
         
-        # 创建更大的表面以实现视差效果
+        # 创建更大的表面以实现视差效果（缓存避免每帧重建）
         self.parallax_width = int(width * 1.1)
         self.parallax_height = int(height * 1.1)
         self.parallax_surface = pygame.transform.smoothscale(
             self.background, (self.parallax_width, self.parallax_height)
-        )
+        ).convert()  # convert to display format for faster blitting
 
     """==========核心组件=========="""
     def update(self, dt):

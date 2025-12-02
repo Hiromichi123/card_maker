@@ -29,6 +29,9 @@ class CardTooltip:
         self.info_font = get_font(int(25 * UI_SCALE)) # 其他信息
         self.desc_font = get_font(int(25 * UI_SCALE)) # 描述
         
+        # Text cache for performance
+        self._text_cache = {}  # key: (card_id, text_type, text)
+        
     """显示提示框"""  
     def show(self, card_data, mouse_pos):
         if card_data is None:
@@ -64,41 +67,80 @@ class CardTooltip:
         if not self.card_data:
             return
         
-        # 顶部大号 ATK / HP
-        atk_surface = self.stat_font.render(f"{self.card_data.atk}", True, (215, 50, 50))
-        hp_surface = self.stat_font.render(f"{self.card_data.hp}", True, (50, 215, 100))
+        card_id = getattr(self.card_data, 'card_id', id(self.card_data))
+        
+        # 顶部大号 ATK / HP - cached
+        atk_key = (card_id, 'atk', self.card_data.atk)
+        if atk_key not in self._text_cache:
+            self._text_cache[atk_key] = self.stat_font.render(f"{self.card_data.atk}", True, (215, 50, 50))
+        atk_surface = self._text_cache[atk_key]
+        
+        hp_key = (card_id, 'hp', self.card_data.hp)
+        if hp_key not in self._text_cache:
+            self._text_cache[hp_key] = self.stat_font.render(f"{self.card_data.hp}", True, (50, 215, 100))
+        hp_surface = self._text_cache[hp_key]
+        
         top_section_height = max(atk_surface.get_height(), hp_surface.get_height())
         stat_gap_min = int(30 * UI_SCALE)
         
         lines = [] # 下方信息
-        title_text = f"{self.card_data.name}" # 名称
-        title_surface = self.title_font.render(title_text, True, COLORS.get(self.card_data.rarity, (255, 255, 255)))
-        lines.append(('title', title_surface))
         
-        # 稀有度
-        rarity_text = f"LV: {self.card_data.rarity}"
-        rarity_surface = self.info_font.render(rarity_text, True, (200, 200, 200))
-        lines.append(('info', rarity_surface))
+        # 名称 - cached
+        title_key = (card_id, 'title', self.card_data.name)
+        if title_key not in self._text_cache:
+            self._text_cache[title_key] = self.title_font.render(
+                self.card_data.name, 
+                True, 
+                COLORS.get(self.card_data.rarity, (255, 255, 255))
+            )
+        lines.append(('title', self._text_cache[title_key]))
         
-        # 属性：CD
-        cd_text = f"CD: {self.card_data.cd}"
-        lines.append(('info', self.info_font.render(cd_text, True, (255, 215, 100))))
+        # 稀有度 - cached
+        rarity_key = (card_id, 'rarity', self.card_data.rarity)
+        if rarity_key not in self._text_cache:
+            self._text_cache[rarity_key] = self.info_font.render(
+                f"LV: {self.card_data.rarity}", 
+                True, 
+                (200, 200, 200)
+            )
+        lines.append(('info', self._text_cache[rarity_key]))
         
-        # 特性
+        # 属性：CD - cached
+        cd_key = (card_id, 'cd', self.card_data.cd)
+        if cd_key not in self._text_cache:
+            self._text_cache[cd_key] = self.info_font.render(
+                f"CD: {self.card_data.cd}", 
+                True, 
+                (255, 215, 100)
+            )
+        lines.append(('info', self._text_cache[cd_key]))
+        
+        # 特性 - cached
         if self.card_data.traits:
             lines.append(('separator', None))
-            traits_text = f"{self.card_data.traits}"
-            traits_surface = self.desc_font.render(traits_text, True, (150, 255, 150))
-            lines.append(('desc', traits_surface))
+            traits_key = (card_id, 'traits', self.card_data.traits)
+            if traits_key not in self._text_cache:
+                self._text_cache[traits_key] = self.desc_font.render(
+                    self.card_data.traits, 
+                    True, 
+                    (150, 255, 150)
+                )
+            lines.append(('desc', self._text_cache[traits_key]))
         
-        # 描述（10字符换行）
+        # 描述（10字符换行） - cached per line
         if self.card_data.description:
             lines.append(('separator', None))
             desc_text = self.card_data.description
             for i in range(0, len(desc_text), 10):
                 line_text = desc_text[i:i+10]
-                desc_surface = self.desc_font.render(line_text, True, (220, 220, 220))
-                lines.append(('desc', desc_surface))
+                desc_key = (card_id, 'desc', i, line_text)
+                if desc_key not in self._text_cache:
+                    self._text_cache[desc_key] = self.desc_font.render(
+                        line_text, 
+                        True, 
+                        (220, 220, 220)
+                    )
+                lines.append(('desc', self._text_cache[desc_key]))
         
         # 计算尺寸
         max_width = max((s.get_width() for t, s in lines if s), default=0)

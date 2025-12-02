@@ -37,17 +37,22 @@ class WorldMapScene(BaseScene):
         btn_x = int(WINDOW_WIDTH * 0.04)
         btn_y = int(WINDOW_HEIGHT * 0.86)
         self.back_button = Button(
-            btn_x,
-            btn_y,
-            btn_width,
-            btn_height,
+            btn_x, btn_y,
+            btn_width, btn_height,
             "返回上一级",
             color=(90, 90, 90),
             hover_color=(130, 130, 130),
-            font_size=42,
+            font_size=int(42*UI_SCALE),
             on_click=lambda: self.switch_to("battle_menu"),
         )
+        self._title_cache = None
+        self._subtitle_cache = None
+        self._build_title_cache()
         self._build_posters()
+
+    def _build_title_cache(self):
+        self._title_cache = self.title_font.render("世界地图", True, (255, 230, 180))
+        self._subtitle_cache = self.subtitle_font.render("点击章节进入关卡", True, (220, 220, 255))
 
     def _build_posters(self):
         self.posters.clear()
@@ -142,9 +147,9 @@ class WorldMapScene(BaseScene):
         self.back_button.draw(self.screen)
 
     def _draw_titles(self):
-        title = self.title_font.render("世界地图", True, (255, 230, 180))
-        title_rect = title.get_rect(center=(WINDOW_WIDTH // 2, TITLE_Y))
-        self.screen.blit(title, title_rect)
-        subtitle = self.subtitle_font.render("点击章节进入关卡", True, (220, 220, 255))
-        subtitle_rect = subtitle.get_rect(center=(WINDOW_WIDTH // 2, TITLE_Y + int(60 * UI_SCALE)))
-        self.screen.blit(subtitle, subtitle_rect)
+        if self._title_cache:
+            title_rect = self._title_cache.get_rect(center=(WINDOW_WIDTH // 2, TITLE_Y))
+            self.screen.blit(self._title_cache, title_rect)
+        if self._subtitle_cache:
+            subtitle_rect = self._subtitle_cache.get_rect(center=(WINDOW_WIDTH // 2, TITLE_Y + int(60 * UI_SCALE)))
+            self.screen.blit(self._subtitle_cache, subtitle_rect)

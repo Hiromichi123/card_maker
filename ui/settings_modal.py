@@ -104,6 +104,16 @@ class SettingsModal:
             self.confirm_button,
             self.cancel_button,
         ]
+        
+        # Text cache for performance
+        self._text_cache = {}
+        self._rebuild_text_cache()
+    
+    def _rebuild_text_cache(self):
+        """Rebuild cached text surfaces"""
+        self._text_cache['title'] = self.title_font.render("设置", True, (255, 255, 255))
+        self._text_cache['desc'] = self.text_font.render("调整 UI 缩放 (0.6 - 1.4)", True, (230, 230, 230))
+        self._text_cache['hint'] = self.text_font.render("确认后将重新构建UI", True, (180, 180, 200))
 
     def _clamp(self, value: float) -> float:
         return max(self.min_scale, min(self.max_scale, value))
@@ -169,11 +179,12 @@ class SettingsModal:
         screen.blit(self.overlay, (0, 0))
         self.panel.draw(screen)
 
-        title_surface = self.title_font.render("设置", True, (255, 255, 255))
+        # 使用缓存文字
+        title_surface = self._text_cache['title']
         title_rect = title_surface.get_rect(center=(self.panel_rect.centerx, self.panel_rect.y + int(45 * UI_SCALE)))
         screen.blit(title_surface, title_rect)
 
-        desc_surface = self.text_font.render("调整 UI 缩放 (0.6 - 1.4)", True, (230, 230, 230))
+        desc_surface = self._text_cache['desc']
         desc_rect = desc_surface.get_rect(center=(self.panel_rect.centerx, self.panel_rect.y + int(95 * UI_SCALE)))
         screen.blit(desc_surface, desc_rect)
 
@@ -187,11 +198,15 @@ class SettingsModal:
         pygame.draw.circle(screen, (255, 215, 0), knob_pos, self.knob_radius)
         pygame.draw.circle(screen, (60, 60, 60), knob_pos, self.knob_radius, max(2, int(2 * UI_SCALE)))
 
-        value_surface = self.value_font.render(f"{self.scale_value:.2f}x", True, (255, 255, 255))
+        # 值文字 - 按需更新缓存
+        value_key = f"value_{self.scale_value:.2f}"
+        if value_key not in self._text_cache:
+            self._text_cache[value_key] = self.value_font.render(f"{self.scale_value:.2f}x", True, (255, 255, 255))
+        value_surface = self._text_cache[value_key]
         value_rect = value_surface.get_rect(center=(self.panel_rect.centerx, self.slider_rect.bottom + int(40 * UI_SCALE)))
         screen.blit(value_surface, value_rect)
 
-        hint_surface = self.text_font.render("确认后将重新构建UI", True, (180, 180, 200))
+        hint_surface = self._text_cache['hint']
         hint_rect = hint_surface.get_rect(center=(self.panel_rect.centerx, value_rect.bottom + int(30 * UI_SCALE)))
         screen.blit(hint_surface, hint_rect)
 

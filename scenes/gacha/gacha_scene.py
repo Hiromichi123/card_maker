@@ -3,30 +3,25 @@ import pygame
 import config
 from ui.button import Button
 from ui.background import ParallaxBackground
-from game.card_system import CardSystem
+from game.card_system import CardSystem, apply_card_scale
+import game.card_system as card_cfg
 from scenes.base.base_scene import BaseScene
 from utils.inventory import get_inventory
 from utils.scene_payload import pop_payload
 from scenes.gacha.gacha_probabilities import simple_prob, get_prob_table
 
-def _card_width():
-    return int(360 * config.UI_SCALE)
-
-def _card_height():
-    return int(540 * config.UI_SCALE)
-
 class GachaScene(BaseScene):
     def __init__(self, screen):
         super().__init__(screen)
         self.background = ParallaxBackground(config.WINDOW_WIDTH, config.WINDOW_HEIGHT, "bg/gacha_normal")
-        self.dim_surface = pygame.Surface((config.WINDOW_WIDTH, config.WINDOW_HEIGHT), pygame.SRCALPHA)
-        self.dim_surface.fill((0, 0, 0, int(255 * 0.2)))
         self.card_system = CardSystem()
         self.inventory = get_inventory()
+        self._last_config_dims = None
+        self._update_layout_metrics(initial=True)
         
         # 字体
-        self.title_font = config.get_font(max(32, int(64 * config.UI_SCALE)))
-        self.info_font = config.get_font(max(12, int(24 * config.UI_SCALE)))
+        self.title_font = config.get_font(int(64 * config.UI_SCALE))
+        self.info_font = config.get_font(int(24 * config.UI_SCALE))
         
         # 当前卡池/概率信息
         self.current_pool_name = "常规卡池"
@@ -42,6 +37,7 @@ class GachaScene(BaseScene):
 
     def enter(self):
         super().enter()
+        self._update_layout_metrics()
         payload = pop_payload("gacha") or {}
         self._apply_payload(payload)
 
@@ -67,6 +63,7 @@ class GachaScene(BaseScene):
 
         bg_type = payload.get("bg_type") or "bg/gacha_normal"
         self.background = ParallaxBackground(config.WINDOW_WIDTH, config.WINDOW_HEIGHT, bg_type)
+        self._update_layout_metrics()
 
         # 重置卡牌展示
         self.card_system.cards = []
@@ -90,6 +87,7 @@ class GachaScene(BaseScene):
         self.back_button.handle_event(event)
 
     def update(self, dt):
+        self._ensure_layout_metrics()
         self.background.update(dt)
         self.card_system.update(dt)
 
@@ -108,8 +106,8 @@ class GachaScene(BaseScene):
                 card_rect = pygame.Rect(
                     card.current_position[0],
                     card.current_position[1],
-                    _card_width(),
-                    _card_height()
+                    card_cfg.CARD_WIDTH,
+                    card_cfg.CARD_HEIGHT
                 )
                 
                 # 检测鼠标是否在卡牌范围内
@@ -128,33 +126,33 @@ class GachaScene(BaseScene):
 
     def draw_title(self):
         """绘制标题"""
-        title_y = int(config.WINDOW_HEIGHT * 0.04)
+        title_y = int(self.view_height * 0.04)
         title_text = self.title_font.render(self.current_pool_name, True, (255, 215, 0))
-        title_rect = title_text.get_rect(center=(config.WINDOW_WIDTH // 2, title_y))
+        title_rect = title_text.get_rect(center=(self.view_width // 2, title_y))
         
         shadow_offset = max(2, int(2 * config.UI_SCALE))
         shadow_text = self.title_font.render(self.current_pool_name, True, (0, 0, 0))
-        shadow_rect = shadow_text.get_rect(center=(config.WINDOW_WIDTH // 2 + shadow_offset, 
+        shadow_rect = shadow_text.get_rect(center=(self.view_width // 2 + shadow_offset, 
                                                    title_y + shadow_offset))
         
         self.screen.blit(shadow_text, shadow_rect)
         self.screen.blit(title_text, title_rect)
 
         desc_text = self.info_font.render(self.current_pool_description, True, (210, 210, 210))
-        desc_rect = desc_text.get_rect(center=(config.WINDOW_WIDTH // 2, title_y + int(40 * config.UI_SCALE)))
+        desc_rect = desc_text.get_rect(center=(self.view_width // 2, title_y + int(40 * config.UI_SCALE)))
         self.screen.blit(desc_text, desc_rect)
 
     def draw_probability_info(self):
         """绘制概率信息"""
         prob_table = self.active_prob_table or simple_prob
-        label_y = int(config.WINDOW_HEIGHT * 0.82)
+        label_y = int(self.view_height * 0.82)
         label_text = self.info_font.render(self.current_prob_label, True, (255, 255, 255))
-        label_rect = label_text.get_rect(center=(config.WINDOW_WIDTH // 2, label_y))
+        label_rect = label_text.get_rect(center=(self.view_width // 2, label_y))
         self.screen.blit(label_text, label_rect)
 
-        y_offset = int(config.WINDOW_HEIGHT * 0.88)
-        x_start = int(config.WINDOW_WIDTH * 0.05)
-        x_spacing = int(config.WINDOW_WIDTH * 0.12)
+        y_offset = int(self.view_height * 0.88)
+        x_start = int(self.view_width * 0.05)
+        x_spacing = int(self.view_width * 0.12)
         for idx, (rarity, probability) in enumerate(prob_table.items()):
             color = config.COLORS.get(rarity, (255, 255, 255))
             info_text = f"{rarity}({probability}%)"
@@ -165,17 +163,14 @@ class GachaScene(BaseScene):
     def _create_back_button(self):
         button_width = int(360 * config.UI_SCALE)
         button_height = int(90 * config.UI_SCALE)
-        button_x = (config.WINDOW_WIDTH - button_width) // 2
-        button_y = int(config.WINDOW_HEIGHT * 0.92)
+        button_x = (self.view_width - button_width) // 2
+        button_y = int(self.view_height * 0.92)
 
         self.back_button = Button(
-            button_x,
-            button_y,
-            button_width,
-            button_height,
+            button_x, button_y,
+            button_width, button_height,
             "返回卡池",
-            color=(100, 150, 255),
-            hover_color=(130, 180, 255),
+            color=(100, 150, 255), hover_color=(130, 180, 255),
             on_click=lambda: self.switch_to("gacha_menu")
         )
 
@@ -207,3 +202,41 @@ class GachaScene(BaseScene):
             drawn_cards = self.card_system.draw_ten_cards(prob=prob)
             cards_to_save = [(card.image_path, card.rarity) for card in drawn_cards]
             self.inventory.add_cards(cards_to_save)
+
+    # ========== 布局/缩放辅助 ==========
+    def _ensure_layout_metrics(self):
+        dims = (
+            config.VISIBLE_WIDTH,
+            config.VISIBLE_HEIGHT,
+            config.WINDOW_WIDTH,
+            config.WINDOW_HEIGHT,
+            config.UI_SCALE,
+        )
+        if dims != getattr(self, "_last_config_dims", None):
+            self._update_layout_metrics()
+
+    def _update_layout_metrics(self, initial=False):
+        self.view_width = max(1, min(config.VISIBLE_WIDTH, config.WINDOW_WIDTH))
+        self.view_height = max(1, min(config.VISIBLE_HEIGHT, config.WINDOW_HEIGHT))
+        self._last_config_dims = (
+            config.VISIBLE_WIDTH,
+            config.VISIBLE_HEIGHT,
+            config.WINDOW_WIDTH,
+            config.WINDOW_HEIGHT,
+            config.UI_SCALE,
+        )
+        self._rebuild_dim_surface()
+        self._refresh_card_scale()
+        if not initial:
+            self._create_back_button()
+
+    def _rebuild_dim_surface(self):
+        size = (config.WINDOW_WIDTH, config.WINDOW_HEIGHT)
+        self.dim_surface = pygame.Surface(size, pygame.SRCALPHA)
+        self.dim_surface.fill((0, 0, 0, int(255 * 0.2)))
+
+    def _refresh_card_scale(self):
+        width_ratio = min(1.0, self.view_width / max(1, config.DESIGN_WIDTH))
+        height_ratio = min(1.0, self.view_height / max(1, config.DESIGN_HEIGHT))
+        scale = max(config.UI_SCALE, width_ratio, height_ratio)
+        apply_card_scale(scale)

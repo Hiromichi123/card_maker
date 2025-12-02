@@ -75,6 +75,10 @@ class CurrencyLevelUI:
 
         # 加载资源
         self._load_assets()
+        self._cache_surface = None
+        self._cache_rect = None
+        self._cache_show_badges = False
+        self._cache_dirty = True
 
     # ---------------- assets ----------------
     def _load_assets(self):
@@ -82,6 +86,7 @@ class CurrencyLevelUI:
         self._gold_surf = self._load_image(self._gold_icon_path, (self.icon_size, self.icon_size))
         self._crystal_surf = self._load_image(self._crystal_icon_path, (self.icon_size, self.icon_size))
         self._badge_surf = self._load_image(self._badge_icon_path, (self.icon_size, self.icon_size))
+        self._invalidate_cache()
 
     def _load_image(self, path, size):
         if path and os.path.exists(path):
@@ -110,6 +115,7 @@ class CurrencyLevelUI:
             self.xp = int(data.get("xp", self.xp))
             self.base_xp = int(data.get("base_xp", self.base_xp))
             self.xp_multiplier = float(data.get("xp_multiplier", self.xp_multiplier))
+            self._invalidate_cache()
             return True
         except Exception as e:
             print(f"[Currency]读取失败: {e}")
@@ -144,9 +150,12 @@ class CurrencyLevelUI:
     # ---------------- mutators ----------------
     def add_golds(self, amount: int):
         try:
+            old_val = self.golds
             self.golds += int(amount)
             if self.golds < 0:
                 self.golds = 0
+            if self.golds != old_val:
+                self._invalidate_cache()
         except Exception:
             pass
 
@@ -175,13 +184,17 @@ class CurrencyLevelUI:
         if self.golds < 0:
             self.golds = 0
         self.save_state()
+        self._invalidate_cache()
         return True
 
     def add_crystals(self, amount: int):
         try:
+            old_val = self.crystals
             self.crystals += int(amount)
             if self.crystals < 0:
                 self.crystals = 0
+            if self.crystals != old_val:
+                self._invalidate_cache()
         except Exception:
             pass
 
@@ -210,13 +223,17 @@ class CurrencyLevelUI:
         if self.crystals < 0:
             self.crystals = 0
         self.save_state()
+        self._invalidate_cache()
         return True
 
     def add_badges(self, amount: int):
         try:
+            old_val = self.badges
             self.badges += int(amount)
             if self.badges < 0:
                 self.badges = 0
+            if self.badges != old_val:
+                self._invalidate_cache()
         except Exception:
             pass
 
@@ -245,6 +262,7 @@ class CurrencyLevelUI:
         if self.badges < 0:
             self.badges = 0
         self.save_state()
+        self._invalidate_cache()
         return True
 
     def add_xp(self, amount: int):
@@ -254,6 +272,8 @@ class CurrencyLevelUI:
         except Exception:
             return info
 
+        old_xp = self.xp
+        old_level = self.level
         self.xp += amt
         # 检查升级
         while self.xp >= self.xp_to_next():
@@ -267,6 +287,8 @@ class CurrencyLevelUI:
                     self.on_level_up(self.level)
                 except Exception:
                     pass
+        if self.xp != old_xp or self.level != old_level:
+            self._invalidate_cache()
         info["xp_overflow"] = int(self.xp)
         return info
 
@@ -303,22 +325,36 @@ class CurrencyLevelUI:
             self.level = int(level)
         if xp is not None:
             self.xp = int(xp)
+        self._invalidate_cache()
+
+    def _invalidate_cache(self):
+        self._cache_surface = None
+        self._cache_rect = None
+        self._cache_dirty = True
 
     # ---------------- drawing ----------------
     def draw(self, surface: pygame.Surface, position: tuple=(UI_START_X, UI_START_Y), show_badges: bool=False):
+        if show_badges and self._badge_surf is None:
+            self._badge_surf = self._load_image(self._badge_icon_path, (self.icon_size, self.icon_size))
+        if self._cache_surface is None or self._cache_dirty or self._cache_show_badges != show_badges:
+            self._cache_show_badges = show_badges
+            self._build_cached_surface(show_badges)
+        if not self._cache_surface:
+            return pygame.Rect(position[0], position[1], 0, 0)
         x, y = position
-        # 计算整体尺寸
+        surface.blit(self._cache_surface, (x, y))
+        return pygame.Rect(x, y, self._cache_surface.get_width(), self._cache_surface.get_height())
+
+    def _build_cached_surface(self, show_badges: bool):
+        icon_text_gap = int(8 * UI_SCALE)
+        entry_gap = int(50 * UI_SCALE)
         currency_entries = [
             (self._gold_surf, str(self.golds), (255, 220, 120)),
             (self._crystal_surf, str(self.crystals), (170, 200, 255)),
         ]
         if show_badges:
-            if self._badge_surf is None:
-                self._badge_surf = self._load_image(self._badge_icon_path, (self.icon_size, self.icon_size))
             currency_entries.append((self._badge_surf, str(self.badges), (255, 190, 160)))
 
-        icon_text_gap = int(8 * UI_SCALE)
-        entry_gap = int(50 * UI_SCALE)
         currency_block_width = 0
         currency_surfaces = []
         for idx, (icon_surf, value, color) in enumerate(currency_entries):
@@ -327,7 +363,7 @@ class CurrencyLevelUI:
             if idx > 0:
                 currency_block_width += entry_gap
             currency_block_width += entry_width
-            currency_surfaces.append((icon_surf, text_surface, color, entry_width))
+            currency_surfaces.append((icon_surf, text_surface, entry_width))
 
         xp_right = self.avatar_size + 2 * self.padding + self.bar_w + int(60 * UI_SCALE)
         icons_x = self.avatar_size + 3 * self.padding
@@ -335,69 +371,57 @@ class CurrencyLevelUI:
         width = max(xp_right + int(30 * UI_SCALE), currency_right + self.padding)
         height = max(self.avatar_size, self.bar_h + self.padding * 2 + 32)
 
-        # 半透明背景表面
-        bg_rect = pygame.Rect(x, y, width, height + 20)
+        surf_height = height + 20
         try:
-            bg_surf = pygame.Surface((width, height + 20), pygame.SRCALPHA)
-            if len(self.bg_color) == 4:
-                bg_surf.fill(self.bg_color)
-            else:
-                bg_surf.fill((*self.bg_color, 220))
+            cache = pygame.Surface((width, surf_height), pygame.SRCALPHA)
+            fill_color = self.bg_color if len(self.bg_color) == 4 else (*self.bg_color, 220)
+            cache.fill(fill_color)
         except Exception:
-            # 回退方案
-            bg_surf = pygame.Surface((width, height))
-            bg_surf.fill((30, 30, 30))
+            cache = pygame.Surface((width, surf_height))
+            cache.fill((30, 30, 30))
 
-        # 头像
         avatar_x = self.padding
         avatar_y = (height - self.avatar_size) // 2 + 10
         if self._avatar_surf is None:
             self._avatar_surf = self._load_image(self._avatar_path, (self.avatar_size, self.avatar_size))
-        bg_surf.blit(self._avatar_surf, (avatar_x, avatar_y))
+        cache.blit(self._avatar_surf, (avatar_x, avatar_y))
 
-        # 头像上的等级文字（右下角）
         level_txt = f"Lv {self.level}"
         txt_surf = self.font_large.render(level_txt, True, (255, 255, 255))
         txt_rect = txt_surf.get_rect()
         txt_pos = (avatar_x + self.avatar_size - txt_rect.width - 6, avatar_y + self.avatar_size - txt_rect.height - 4)
-        bg_surf.blit(txt_surf, txt_pos)
+        cache.blit(txt_surf, txt_pos)
 
-        # XP 进度条区域（头像右侧）
         bar_x = avatar_x + self.avatar_size + self.padding
         bar_y = self.padding + 6
-        # 绘制标签
         lbl_surf = self.font.render("XP", True, (200, 200, 200))
-        bg_surf.blit(lbl_surf, (bar_x, bar_y))
-        # 进度条背景
+        cache.blit(lbl_surf, (bar_x, bar_y))
         bar_bg_rect = pygame.Rect(bar_x + 30, bar_y, self.bar_w + 30, self.bar_h)
-        pygame.draw.rect(bg_surf, (80, 80, 80), bar_bg_rect, border_radius=6)
-        # 进度条填充
+        pygame.draw.rect(cache, (80, 80, 80), bar_bg_rect, border_radius=6)
         req = self.xp_to_next()
         fill_w = 0
         if req > 0:
             fill_w = int(self.bar_w * min(1.0, max(0.0, self.xp / req)))
         fill_rect = pygame.Rect(bar_bg_rect.x, bar_bg_rect.y, fill_w, self.bar_h)
-        pygame.draw.rect(bg_surf, (90, 200, 120), fill_rect, border_radius=6)
-        # XP 标签
+        pygame.draw.rect(cache, (90, 200, 120), fill_rect, border_radius=6)
         xp_text = f"{self.xp}/{req}"
         xp_surf = self.font.render(xp_text, True, (230, 230, 230))
         xp_x = bar_bg_rect.x + (self.bar_w + 30 - xp_surf.get_width()) // 2
         xp_y = bar_bg_rect.y + (self.bar_h - xp_surf.get_height()) // 2
-        bg_surf.blit(xp_surf, (xp_x, xp_y))
+        cache.blit(xp_surf, (xp_x, xp_y))
 
-        # 金币和水晶区域（xp下方）
         icons_x = bar_x + self.padding
         icons_y = self.padding + self.bar_h + 16
         current_x = icons_x
-        for idx, (icon_surf, text_surface, _color, entry_width) in enumerate(currency_surfaces):
+        for idx, (icon_surf, text_surface, entry_width) in enumerate(currency_surfaces):
             if idx > 0:
                 current_x += entry_gap
-            bg_surf.blit(icon_surf, (current_x, icons_y))
+            cache.blit(icon_surf, (current_x, icons_y))
             text_x = current_x + self.icon_size + icon_text_gap
             text_y = icons_y + (self.icon_size - text_surface.get_height()) // 2
-            bg_surf.blit(text_surface, (text_x, text_y))
+            cache.blit(text_surface, (text_x, text_y))
             current_x += entry_width
 
-        # 最后将 bg_surf 绘制到提供的表面上
-        surface.blit(bg_surf, (x, y))
-        return bg_rect
+        self._cache_surface = cache
+        self._cache_rect = pygame.Rect(0, 0, cache.get_width(), cache.get_height())
+        self._cache_dirty = False

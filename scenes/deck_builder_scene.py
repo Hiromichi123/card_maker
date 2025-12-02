@@ -10,27 +10,24 @@ from utils.deck_manager import get_deck_manager
 from utils.card_database import get_card_database
 from config import *
 
-# 左侧卡组面板
-deck_panel_width = int(WINDOW_WIDTH * 0.35)
-deck_panel_height = int(WINDOW_HEIGHT * 0.9)
-deck_panel_x = int(WINDOW_WIDTH * 0.05)
-deck_panel_y = int(WINDOW_HEIGHT * 0.05)
-# 滚动视图（右侧，用于显示收藏的卡牌）
-scroll_x = int(WINDOW_WIDTH * 0.45)
-scroll_y = int(WINDOW_HEIGHT * 0.15)
-scroll_width = int(WINDOW_WIDTH * 0.5)
-scroll_height = int(WINDOW_HEIGHT * 0.7)
-# 创建12个卡组槽位（2列6行）
-slot_width = int(216 * UI_SCALE)
-slot_height = int(324 * UI_SCALE)
-slot_spacing = int(30 * UI_SCALE)
-cols = 3
-rows = 4
-# 卡牌widget设置
-card_width = int(216 * UI_SCALE)
-card_height = int(324 * UI_SCALE)
-card_spacing = int(30 * UI_SCALE)
-cards_per_row = 5
+# 布局比例/基础尺寸
+DECK_PANEL_X_RATIO = 0.05
+DECK_PANEL_Y_RATIO = 0.05
+DECK_PANEL_WIDTH_RATIO = 0.35
+DECK_PANEL_HEIGHT_RATIO = 0.90
+SCROLL_X_RATIO = 0.45
+SCROLL_Y_RATIO = 0.15
+SCROLL_WIDTH_RATIO = 0.50
+SCROLL_HEIGHT_RATIO = 0.70
+BASE_SLOT_WIDTH = 216
+BASE_SLOT_HEIGHT = 324
+BASE_SLOT_SPACING = 30
+DECK_SLOT_COLS = 3
+DECK_SLOT_ROWS = 4
+BASE_COLLECTION_CARD_WIDTH = 216
+BASE_COLLECTION_CARD_HEIGHT = 324
+BASE_COLLECTION_CARD_SPACING = 30
+CARDS_PER_ROW = 5
 
 """可拖拽的卡牌类"""
 class DraggableCard:
@@ -263,6 +260,8 @@ class DeckBuilderScene(BaseScene):
         self.deck_manager = get_deck_manager() # 获取卡组管理器
         self.card_database = get_card_database()
         self.background = self.create_background() # 背景
+        self.layout_signature = None
+        self._update_layout_metrics(initial=True)
         
         # 字体
         self.title_font = get_font(max(32, int(64 * UI_SCALE)))
@@ -297,77 +296,93 @@ class DeckBuilderScene(BaseScene):
 
     """创建UI组件"""
     def create_ui(self):
-        self.deck_panel = Panel(deck_panel_x, deck_panel_y, deck_panel_width, deck_panel_height)
+        self.deck_panel = Panel(
+            self.deck_panel_rect.x,
+            self.deck_panel_rect.y,
+            self.deck_panel_rect.width,
+            self.deck_panel_rect.height
+        )
 
-        total_width = cols * slot_width + (cols - 1) * slot_spacing
-        total_height = rows * slot_height + (rows - 1) * slot_spacing
-        
-        start_x = deck_panel_x + (deck_panel_width - total_width) // 2
-        start_y = deck_panel_y + int(50 * UI_SCALE)
-        
-        for i in range(12):
-            row = i // cols
-            col = i % cols
-            x = start_x + col * (slot_width + slot_spacing)
-            y = start_y + row * (slot_height + slot_spacing)
-            
-            slot = DeckSlot(x, y, slot_width, slot_height, i)
+        self.deck_slots = []
+        start_x = self.deck_panel_rect.x + max(0, (self.deck_panel_rect.width - self.slot_total_width) // 2)
+        start_y = self.deck_panel_rect.y + int(50 * UI_SCALE)
+
+        for i in range(DECK_SLOT_COLS * DECK_SLOT_ROWS):
+            row = i // DECK_SLOT_COLS
+            col = i % DECK_SLOT_COLS
+            x = start_x + col * (self.slot_width + self.slot_spacing)
+            y = start_y + row * (self.slot_height + self.slot_spacing)
+
+            slot = DeckSlot(x, y, self.slot_width, self.slot_height, i)
             self.deck_slots.append(slot)
-        
-        self.scroll_view = ScrollView(scroll_x, scroll_y, scroll_width, scroll_height, 0)
-        
+
+        self.scroll_view = ScrollView(
+            self.scroll_rect.x,
+            self.scroll_rect.y,
+            self.scroll_rect.width,
+            self.scroll_rect.height,
+            0
+        )
+
         # 按钮
-        button_width = int(200 * UI_SCALE)
-        button_height = int(75 * UI_SCALE)
-        button_spacing = int(30 * UI_SCALE)
-        
+        button_width = max(140, min(int(200 * UI_SCALE), int(self.view_width * 0.2)))
+        button_height = max(50, min(int(75 * UI_SCALE), int(self.view_height * 0.12)))
+        button_spacing = max(int(20 * UI_SCALE), int(self.view_width * 0.015))
+        button_y = self.view_origin_y + self.view_height - button_height - max(int(0.02 * self.view_height), 20)
+
         # 保存按钮
         self.save_button = Button(
-            deck_panel_x,
-            int(WINDOW_HEIGHT * 0.95),
+            self.deck_panel_rect.x,
+            button_y,
             button_width,
             button_height,
             "保存卡组",
             color=(100, 200, 100),
             hover_color=(130, 230, 130),
-            font_size=24,
+            font_size=max(18, int(24 * UI_SCALE)),
             on_click=self.save_deck
         )
-        
+
         # 清空按钮
         self.clear_button = Button(
-            deck_panel_x + button_width + button_spacing,
-            int(WINDOW_HEIGHT * 0.95),
+            self.deck_panel_rect.x + button_width + button_spacing,
+            button_y,
             button_width,
             button_height,
             "清空卡组",
             color=(200, 100, 100),
             hover_color=(230, 130, 130),
-            font_size=24,
+            font_size=max(18, int(24 * UI_SCALE)),
             on_click=self.clear_deck
         )
-        
+
         # 返回按钮
         self.back_button = Button(
-            int(WINDOW_WIDTH * 0.85),
-            int(WINDOW_HEIGHT * 0.92),
+            self.view_origin_x + self.view_width - button_width - max(int(0.02 * self.view_width), 20),
+            button_y,
             button_width,
             button_height,
             "返回菜单",
             color=(100, 100, 100),
             hover_color=(130, 130, 130),
-            font_size=24,
+            font_size=max(18, int(24 * UI_SCALE)),
             on_click=lambda: self.switch_to("main_menu")
         )
+        
+        # 标题缓存
+        self._title_cache = None
+        self._shadow_cache = None
+        self._rebuild_title_cache()
     
     """重新加载卡牌"""
-    def reload_cards(self):
-        deck_data = self.deck_manager.get_deck()
-        for slot in self.deck_slots:
-            slot.remove_card()
-        for i, card_data in enumerate(deck_data):
-            if i < len(self.deck_slots):
-                self.deck_slots[i].set_card(card_data)
+    def reload_cards(self, preserve_slots=False):
+        if not preserve_slots:
+            deck_data = self.deck_manager.get_deck()
+            for slot in self.deck_slots:
+                slot.remove_card()
+            for i, card_data in enumerate(deck_data):
+                if i < len(self.deck_slots):
+                    self.deck_slots[i].set_card(card_data)
         
         collection_data = self.inventory.get_unique_cards() # 加载收藏的卡牌
         
@@ -389,24 +404,35 @@ class DeckBuilderScene(BaseScene):
         self.collection_cards = []
         self.collection_card_map = {}
         for i, card_data in enumerate(collection_data):
-            row = i // cards_per_row
-            col = i % cards_per_row
+            row = i // CARDS_PER_ROW
+            col = i % CARDS_PER_ROW
             
-            x = card_spacing + col * (card_width + card_spacing)
-            y = card_spacing + row * (card_height + card_spacing)
+            x = self.collection_card_spacing + col * (self.collection_card_width + self.collection_card_spacing)
+            y = self.collection_card_spacing + row * (self.collection_card_height + self.collection_card_spacing)
             
             available_count = self.card_counts.get(card_data["path"], card_data.get("count", 0))
             card_copy = dict(card_data)
             card_copy["count"] = available_count
-            card_widget = DraggableCard(card_copy, x, y, card_width, card_height, "collection")
+            card_widget = DraggableCard(
+                card_copy,
+                x,
+                y,
+                self.collection_card_width,
+                self.collection_card_height,
+                "collection"
+            )
             card_widget.update_count(available_count)
             self.collection_cards.append(card_widget)
             self.collection_card_map[card_data["path"]] = card_widget
         
         # 更新滚动视图高度
         if collection_data:
-            total_rows = (len(collection_data) + cards_per_row - 1) // cards_per_row
-            content_height = card_spacing + total_rows * (card_height + card_spacing) + card_spacing
+            total_rows = (len(collection_data) + CARDS_PER_ROW - 1) // CARDS_PER_ROW
+            content_height = (
+                self.collection_card_spacing
+                + total_rows * (self.collection_card_height + self.collection_card_spacing)
+                + self.collection_card_spacing
+            )
         else:
             content_height = 0
         
@@ -456,6 +482,7 @@ class DeckBuilderScene(BaseScene):
     def enter(self):
         """进入场景时重新加载"""
         super().enter()
+        self._ensure_layout_metrics()
         self.inventory.load()
         self.deck_manager.load()
         self.reload_cards()
@@ -612,7 +639,7 @@ class DeckBuilderScene(BaseScene):
     
     """更新"""
     def update(self, dt):
-        pass
+        self._ensure_layout_metrics()
 
     """绘制场景"""
     def draw(self):
@@ -657,18 +684,14 @@ class DeckBuilderScene(BaseScene):
     
     def draw_title(self):
         """绘制标题"""
-        title_y = int(WINDOW_HEIGHT * 0.05)
-        title_text = self.title_font.render("卡组配置", True, (255, 215, 0))
-        title_rect = title_text.get_rect(center=(WINDOW_WIDTH // 2, title_y))
-        
-        shadow_offset = max(2, int(2 * UI_SCALE))
-        shadow_text = self.title_font.render("卡组配置", True, (0, 0, 0))
-        shadow_rect = shadow_text.get_rect(
-            center=(WINDOW_WIDTH // 2 + shadow_offset, title_y + shadow_offset)
-        )
-        
-        self.screen.blit(shadow_text, shadow_rect)
-        self.screen.blit(title_text, title_rect)
+        title_y = self.view_origin_y + int(self.view_height * 0.05)
+        if self._title_cache and self._shadow_cache:
+            shadow_text, shadow_offset = self._shadow_cache
+            center_x = self.view_origin_x + self.view_width // 2
+            title_rect = self._title_cache.get_rect(center=(center_x, title_y))
+            shadow_rect = shadow_text.get_rect(center=(center_x + shadow_offset, title_y + shadow_offset))
+            self.screen.blit(shadow_text, shadow_rect)
+            self.screen.blit(self._title_cache, title_rect)
     
     def draw_collection(self):
         """绘制收藏卡牌"""
@@ -702,3 +725,73 @@ class DeckBuilderScene(BaseScene):
                     card.draw(surface, override_rect=temp_rect, show_count=True)
         
         self.scroll_view.end_draw(self.screen)
+
+    # ========== 布局/缩放辅助 ==========
+    def _ensure_layout_metrics(self):
+        signature = (
+            VISIBLE_WIDTH,
+            VISIBLE_HEIGHT,
+            WINDOW_WIDTH,
+            WINDOW_HEIGHT,
+            UI_SCALE,
+        )
+        if signature != self.layout_signature:
+            self._update_layout_metrics()
+
+    def _update_layout_metrics(self, initial=False):
+        self.view_origin_x = VIEW_SRC_X
+        self.view_origin_y = VIEW_SRC_Y
+        self.view_width = max(1, VISIBLE_WIDTH)
+        self.view_height = max(1, VISIBLE_HEIGHT)
+        self.deck_panel_rect = pygame.Rect(
+            self.view_origin_x + int(self.view_width * DECK_PANEL_X_RATIO),
+            self.view_origin_y + int(self.view_height * DECK_PANEL_Y_RATIO),
+            int(self.view_width * DECK_PANEL_WIDTH_RATIO),
+            int(self.view_height * DECK_PANEL_HEIGHT_RATIO)
+        )
+        self.scroll_rect = pygame.Rect(
+            self.view_origin_x + int(self.view_width * SCROLL_X_RATIO),
+            self.view_origin_y + int(self.view_height * SCROLL_Y_RATIO),
+            int(self.view_width * SCROLL_WIDTH_RATIO),
+            int(self.view_height * SCROLL_HEIGHT_RATIO)
+        )
+        self._compute_slot_metrics()
+        self._compute_collection_metrics()
+        self.layout_signature = (
+            VISIBLE_WIDTH,
+            VISIBLE_HEIGHT,
+            WINDOW_WIDTH,
+            WINDOW_HEIGHT,
+            UI_SCALE,
+        )
+        if initial:
+            return
+        current_deck = [slot.card for slot in self.deck_slots] if hasattr(self, "deck_slots") else []
+        self.create_ui()
+        for slot, card in zip(self.deck_slots, current_deck):
+            if card:
+                slot.set_card(card)
+        self.reload_cards(preserve_slots=True)
+
+    def _compute_slot_metrics(self):
+        base_width = BASE_SLOT_WIDTH * UI_SCALE
+        base_height = BASE_SLOT_HEIGHT * UI_SCALE
+        base_spacing = BASE_SLOT_SPACING * UI_SCALE
+        total_width = DECK_SLOT_COLS * base_width + (DECK_SLOT_COLS - 1) * base_spacing
+        available_width = max(1, self.deck_panel_rect.width * 0.9)
+        shrink = min(1.0, available_width / total_width) if total_width else 1.0
+        self.slot_width = max(80, int(base_width * shrink))
+        self.slot_height = max(120, int(base_height * shrink))
+        self.slot_spacing = max(10, int(base_spacing * shrink))
+        self.slot_total_width = DECK_SLOT_COLS * self.slot_width + (DECK_SLOT_COLS - 1) * self.slot_spacing
+
+    def _compute_collection_metrics(self):
+        base_width = BASE_COLLECTION_CARD_WIDTH * UI_SCALE
+        base_height = BASE_COLLECTION_CARD_HEIGHT * UI_SCALE
+        base_spacing = BASE_COLLECTION_CARD_SPACING * UI_SCALE
+        total_width = CARDS_PER_ROW * base_width + (CARDS_PER_ROW - 1) * base_spacing
+        usable_width = max(1, self.scroll_rect.width - 2 * base_spacing)
+        shrink = min(1.0, usable_width / total_width) if total_width else 1.0
+        self.collection_card_width = max(90, int(base_width * shrink))
+        self.collection_card_height = max(140, int(base_height * shrink))
+        self.collection_card_spacing = max(12, int(base_spacing * shrink))

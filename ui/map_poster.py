@@ -35,6 +35,8 @@ class MapPoster:
         self.selected = False
         self._font = get_font(int(34 * UI_SCALE))
         self._image = self._load_image(image_path)
+        self._panel_surface = self._build_panel_surface()
+        self._glow_surface = self._build_glow_surface()
 
     def _load_image(self, path: Optional[str]):
         if not path:
@@ -55,24 +57,28 @@ class MapPoster:
                 self.on_click(self.payload or "")
 
     def draw(self, surface: pygame.Surface):
+        if self._panel_surface:
+            surface.blit(self._panel_surface, self.rect.topleft)
+        if self.selected and self._glow_surface:
+            surface.blit(self._glow_surface, (self.rect.x - 10, self.rect.y - 10), special_flags=pygame.BLEND_ADD)
+
+        border_color = SELECTED_COLOR if self.selected else (HOVER_COLOR if self.hovered else BORDER_COLOR)
+        pygame.draw.rect(surface, border_color, self.rect, BORDER_WIDTH, border_radius=16)
+
+    def set_selected(self, value: bool):
+        self.selected = value
+
+    def _build_panel_surface(self):
         panel = pygame.Surface((self.rect.width, self.rect.height), pygame.SRCALPHA)
         panel.fill(PANEL_COLOR)
-
-        # draw image if present
         if self._image:
             panel.blit(self._image, (0, 0))
         else:
             placeholder = pygame.Surface((self.rect.width, self.rect.height), pygame.SRCALPHA)
             placeholder.fill((60, 60, 70, 200))
-            pygame.draw.rect(
-                placeholder,
-                COLORS.get("A", (180, 180, 180)),
-                placeholder.get_rect(),
-                4,
-            )
+            pygame.draw.rect(placeholder, COLORS.get("A", (180, 180, 180)), placeholder.get_rect(), 4)
             panel.blit(placeholder, (0, 0))
 
-        # label background
         if self.label:
             label_height = int(self.rect.height * 0.18)
             label_rect = pygame.Rect(0, self.rect.height - label_height, self.rect.width, label_height)
@@ -83,15 +89,11 @@ class MapPoster:
             text_surface = self._font.render(self.label, True, LABEL_COLOR)
             text_rect = text_surface.get_rect(center=label_rect.center)
             panel.blit(text_surface, (text_rect.x - label_rect.x, text_rect.y - label_rect.y))
+        return panel
 
-        if self.selected:
-            glow = pygame.Surface((self.rect.width + 20, self.rect.height + 20), pygame.SRCALPHA)
-            pygame.draw.rect(glow, SELECTED_GLOW, glow.get_rect(), border_radius=24)
-            surface.blit(glow, (self.rect.x - 10, self.rect.y - 10), special_flags=pygame.BLEND_ADD)
-
-        border_color = SELECTED_COLOR if self.selected else (HOVER_COLOR if self.hovered else BORDER_COLOR)
-        pygame.draw.rect(panel, border_color, panel.get_rect(), BORDER_WIDTH, border_radius=16)
-        surface.blit(panel, self.rect.topleft)
-
-    def set_selected(self, value: bool):
-        self.selected = value
+    def _build_glow_surface(self):
+        glow = pygame.Surface((self.rect.width + 20, self.rect.height + 20), pygame.SRCALPHA)
+        inner_rect = glow.get_rect()
+        border_thickness = max(4, BORDER_WIDTH * 2)
+        pygame.draw.rect(glow, SELECTED_GLOW, inner_rect, width=border_thickness, border_radius=24)
+        return glow

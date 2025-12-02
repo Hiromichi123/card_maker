@@ -9,6 +9,11 @@ from ui.system_ui import CurrencyLevelUI
 from ui.activity_poster import PosterUI
 from ui.settings_modal import SettingsModal
 
+try:
+    from version import __version__
+except ImportError:
+    __version__ = "1.0.0"
+
 # 海报跳转映射表：index -> scene_name
 poster_to_scene = {
     0: "gacha_menu",
@@ -57,10 +62,22 @@ class MainMenuScene(BaseScene):
         self.notice_font = get_font(int(32 * UI_SCALE))
         self.notice_message = ""
         self.notice_timer = 0.0
+        self._title_cache = None
+        self._shadow_cache = None
+        self._rebuild_title_cache()
+        
+        # Version display
+        self.version_font = get_font(max(12, int(18 * UI_SCALE)))
+        self._version_surface = self.version_font.render(f"v{__version__}", True, (150, 150, 150))
     
     def quit_game(self):
         """退出游戏"""
         self.quit_flag = True
+    
+    def _rebuild_title_cache(self):
+        self._title_cache = self.title_font.render(config.GAME_TITLE, True, (255, 215, 0))
+        shadow_offset = max(3, int(3 * UI_SCALE))
+        self._shadow_cache = (self.title_font.render(config.GAME_TITLE, True, (0, 0, 0)), shadow_offset)
     
     def handle_event(self, event):
         if self.settings_modal:
@@ -101,17 +118,15 @@ class MainMenuScene(BaseScene):
     def draw(self):
         self.background.draw(self.screen) # 背景
         
-        # 绘制标题
-        title_text = self.title_font.render(config.GAME_TITLE, True, (255, 215, 0))
-        title_rect = title_text.get_rect(center=(WINDOW_WIDTH // 2, int(WINDOW_HEIGHT * 0.12)))
-        
-        # 标题阴影
-        shadow_offset = max(3, int(3 * UI_SCALE))
-        shadow_text = self.title_font.render(config.GAME_TITLE, True, (0, 0, 0))
-        shadow_rect = shadow_text.get_rect(center=(WINDOW_WIDTH // 2 + shadow_offset, 
-                                                   int(WINDOW_HEIGHT * 0.12) + shadow_offset))
-        self.screen.blit(shadow_text, shadow_rect)
-        self.screen.blit(title_text, title_rect)
+        # 绘制标题（使用缓存）
+        if self._title_cache and self._shadow_cache:
+            shadow_text, shadow_offset = self._shadow_cache
+            center_x = WINDOW_WIDTH // 2
+            center_y = int(WINDOW_HEIGHT * 0.12)
+            shadow_rect = shadow_text.get_rect(center=(center_x + shadow_offset, center_y + shadow_offset))
+            title_rect = self._title_cache.get_rect(center=(center_x, center_y))
+            self.screen.blit(shadow_text, shadow_rect)
+            self.screen.blit(self._title_cache, title_rect)
 
         self.currency_ui.draw(self.screen) # 货币和等级 UI
         self.poster_ui.draw(self.screen, poster_topleft) #绘制活动海报
@@ -136,6 +151,12 @@ class MainMenuScene(BaseScene):
             self.screen.blit(notice_surface, notice_rect)
         if self.settings_modal:
             self.settings_modal.draw(self.screen)
+        
+        # Draw version number in bottom right corner
+        version_rect = self._version_surface.get_rect(
+            bottomright=(WINDOW_WIDTH - int(10 * UI_SCALE), WINDOW_HEIGHT - int(10 * UI_SCALE))
+        )
+        self.screen.blit(self._version_surface, version_rect)
 
     def create_buttons(self):
         self.buttons.clear()
@@ -158,6 +179,7 @@ class MainMenuScene(BaseScene):
         config.set_ui_scale(scale_value)
         self.close_settings_modal()
         self._build_static_ui()
+        self._rebuild_title_cache()
 
     def _create_primary_buttons(self):
         # 战斗按钮

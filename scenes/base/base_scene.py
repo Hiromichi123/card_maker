@@ -7,6 +7,8 @@ from ui.tooltip import get_tooltip # 导入全局 tooltip 获取函数
 
 """场景基类"""
 class BaseScene(ABC):
+    force_native_resolution = False
+
     def __init__(self, screen):
         self.screen = screen
         self.next_scene = None  # 下一个要跳转的场景

@@ -4,6 +4,7 @@ import os
 import random
 import pygame
 from time import time
+import config
 from config import *
 from scenes.base.base_scene import BaseScene
 from ui.button import Button
@@ -19,10 +20,12 @@ from game.skills import get_skill_registry, BattleContext, SkillTrigger # 技能
 from game.card_system import CARD_PROBABILITIES
 from ui.system_ui import CurrencyLevelUI
 
-# region  常量配置
 # 背景设置
 BATTLE_BG_BRIGHTNESS = 0.7  # 背景亮度 (0.0-1.0)
 BATTLE_BG_ALPHA = 200       # 背景透明度 (0-255)
+
+# 战斗UI缩放
+MAX_BATTLE_SCALE_BOOST = 1.5  # 小屏幕下的最大额外放大倍数
 
 # 战斗区卡牌槽位尺寸
 BATTLE_CARD_BASE_WIDTH = 288   # 战斗区卡牌基础宽度
@@ -32,12 +35,11 @@ BATTLE_CARD_SPACING = 15       # 战斗区卡牌间距
 # 等候区卡牌槽位尺寸
 WAITING_CARD_BASE_WIDTH = 144   # 等候区卡牌基础宽度
 WAITING_CARD_BASE_HEIGHT = 216  # 等候区卡牌基础高度
-WAITING_CARD_SPACING = 15      # 等候区卡牌间距
+WAITING_CARD_SPACING = 15       # 等候区卡牌间距
 
 # 弃牌堆槽位尺寸
-DISCARD_CARD_BASE_WIDTH = 216  # 弃牌堆基础宽度
+DISCARD_CARD_BASE_WIDTH = 216   # 弃牌堆基础宽度
 DISCARD_CARD_BASE_HEIGHT = 324  # 弃牌堆基础高度
-
 # 战斗区布局
 BATTLE_SLOTS_COUNT = 5         # 战斗区槽位数量
 WAITING_SLOTS_COUNT = 8        # 等候区槽位数量
@@ -70,19 +72,40 @@ SPECIAL_CARD_DROP_CHANCE = 0.10
 SPECIAL_CRYSTAL_RANGE = (3, 10)
 # endregion
 
+def _sync_config_globals():
+    """Refresh imported config values so they match the active viewport settings."""
+    global WINDOW_WIDTH, WINDOW_HEIGHT, SCREEN_WIDTH, SCREEN_HEIGHT
+    global VIEW_SRC_X, VIEW_SRC_Y, VIEW_DEST_X, VIEW_DEST_Y
+    global VISIBLE_WIDTH, VISIBLE_HEIGHT, UI_SCALE, FPS
+    WINDOW_WIDTH = config.WINDOW_WIDTH
+    WINDOW_HEIGHT = config.WINDOW_HEIGHT
+    SCREEN_WIDTH = config.SCREEN_WIDTH
+    SCREEN_HEIGHT = config.SCREEN_HEIGHT
+    VIEW_SRC_X = config.VIEW_SRC_X
+    VIEW_SRC_Y = config.VIEW_SRC_Y
+    VIEW_DEST_X = config.VIEW_DEST_X
+    VIEW_DEST_Y = config.VIEW_DEST_Y
+    VISIBLE_WIDTH = config.VISIBLE_WIDTH
+    VISIBLE_HEIGHT = config.VISIBLE_HEIGHT
+    UI_SCALE = config.UI_SCALE
+    FPS = config.FPS
+
 """战斗场景基类"""
 class BattleBaseScene(BaseScene):
     def __init__(self, screen):
         super().__init__(screen)
+        _sync_config_globals()
+        self._update_safe_area()
         self.battle_initialized = False # 初始化标志
 
         # 背景图片路径
+        self.scene_ui_scale = self._compute_scene_ui_scale()
         self.background_image_path = "assets/battle_bg.png"
         self.background = self.load_background()
         
         # 字体
-        self.title_font = get_font(int(32 * UI_SCALE))
-        self.info_font = get_font(int(20 * UI_SCALE))
+        self.title_font = get_font(self._font_size(32))
+        self.info_font = get_font(self._font_size(20))
 
         self.load_turn_indicator_bg() # 回合指示器背景
         self.turn_indicator_anim_progress = 0.0
@@ -108,17 +131,17 @@ class BattleBaseScene(BaseScene):
         self.create_slots() # 创建槽位
 
         # 卡堆渲染器
-        player_deck_x = int(WINDOW_WIDTH * 0.05)
-        player_deck_y = int(WINDOW_HEIGHT * 0.65)  # 玩家卡堆位置（左下）
+        player_deck_x = self._safe_x(0.05)
+        player_deck_y = self._safe_y(0.65)  # 玩家卡堆位置（左下）
         self.player_deck_renderer = DeckRenderer(player_deck_x, player_deck_y, is_player=True)
-        enemy_deck_x = int(WINDOW_WIDTH * 0.05)
-        enemy_deck_y = int(WINDOW_HEIGHT * 0.15)  # 敌人卡堆位置（左上）
+        enemy_deck_x = self._safe_x(0.05)
+        enemy_deck_y = self._safe_y(0.15)  # 敌人卡堆位置（左上）
         self.enemy_deck_renderer = DeckRenderer(enemy_deck_x, enemy_deck_y, is_player=False)
 
         # 按钮
-        self.button_width = int(150 * UI_SCALE)
-        self.button_height = int(50 * UI_SCALE)
-        self.margin = int(20 * UI_SCALE)
+        self.button_width = self._scale(150)
+        self.button_height = self._scale(50)
+        self.margin = self._scale(20)
         self.create_base_buttons()
 
         # 双方牌堆
@@ -150,6 +173,14 @@ class BattleBaseScene(BaseScene):
         }
         self._advance_owner_turn("player")
         
+        # 标签缓存
+        self._label_cache = {}  # 缓存标签表面
+        self._turn_text_cache = {}  # 回合指示器文本缓存
+        self._flash_surface_cache = None
+        self._overlay_cache = None
+        self._game_over_text_cache = None  # 游戏结束屏幕文本缓存
+        self._rebuild_label_cache()
+        
         # 战斗状态
         self.battle_in_progress = False  # 是否正在进行战斗结算
         self.battle_animations = []      # 战斗动画队列
@@ -173,10 +204,10 @@ class BattleBaseScene(BaseScene):
         self.card_database = get_card_database()
         self.inventory = get_inventory()
         self.confirm_button = Button(
-            int(WINDOW_WIDTH * 0.5) - int(120 * UI_SCALE),
-            int(WINDOW_HEIGHT * 0.65),
-            int(240 * UI_SCALE),
-            int(64 * UI_SCALE),
+            self.safe_origin_x + self.safe_width // 2 - self._scale(120),
+            self._safe_y(0.65),
+            self._scale(240),
+            self._scale(64),
             "确认",
             color=(80, 150, 80),
             hover_color=(120, 190, 120),
@@ -195,6 +226,7 @@ class BattleBaseScene(BaseScene):
             self.battle_initialized = True
 
     def update(self, dt):
+        self._update_safe_area()
         if self.game_over:
             return
         
@@ -246,7 +278,34 @@ class BattleBaseScene(BaseScene):
             self.player_hand.clear_selection()
             self.switch_to("main_menu")
 
+    def _rebuild_label_cache(self):
+        """构建缓存的标签表面"""
+        # 场景标签
+        enemy_label = self.title_font.render("敌方区域", True, (255, 100, 100))
+        enemy_rect = enemy_label.get_rect()
+        enemy_bg = pygame.Surface((enemy_rect.width + 20, enemy_rect.height + 10), pygame.SRCALPHA)
+        enemy_bg.fill((0, 0, 0, 120))
+        self._label_cache['enemy_label'] = enemy_label
+        self._label_cache['enemy_bg'] = enemy_bg
+        
+        player_label = self.title_font.render("我方区域", True, (100, 255, 100))
+        player_rect = player_label.get_rect()
+        player_bg = pygame.Surface((player_rect.width + 20, player_rect.height + 10), pygame.SRCALPHA)
+        player_bg.fill((0, 0, 0, 120))
+        self._label_cache['player_label'] = player_label
+        self._label_cache['player_bg'] = player_bg
+        
+        # 血量条标签
+        self._label_cache['player_name'] = self.info_font.render("玩家", True, (200, 255, 200))
+        self._label_cache['enemy_name'] = self.info_font.render("敌人", True, (255, 200, 200))
+        
+        # 槽位标签
+        battle_label_font = get_font(self._font_size(16, minimum=12))
+        self._label_cache['waiting_label'] = battle_label_font.render("等候区", True, (200, 200, 150))
+        self._label_cache['discard_label'] = battle_label_font.render("弃牌堆", True, (200, 150, 150))
+
     def draw(self):
+        self._update_safe_area()
         self.screen.blit(self.background, (0, 0)) # 背景
         self.draw_turn_indicator() # 回合指示器
         self.draw_scene_labels() # 场景标识
@@ -684,8 +743,8 @@ class BattleBaseScene(BaseScene):
         middle_y = WINDOW_HEIGHT // 2
         line_color = tuple(int(c * BATTLE_BG_BRIGHTNESS) for c in (100, 100, 120))
         pygame.draw.line(bg, line_color, 
-                        (0, middle_y), (WINDOW_WIDTH, middle_y), 
-                        max(2, int(3 * UI_SCALE)))
+                (0, middle_y), (WINDOW_WIDTH, middle_y), 
+                max(2, self._scale(3)))
         
         # 应用透明度
         if BATTLE_BG_ALPHA < 255:
@@ -702,8 +761,8 @@ class BattleBaseScene(BaseScene):
             try:
                 self.turn_bg = pygame.image.load(bg_path).convert_alpha()
                 # 缩放到合适大小
-                bg_width = int(300 * UI_SCALE)
-                bg_height = int(300 * UI_SCALE)
+                bg_width = self._scale(300)
+                bg_height = self._scale(300)
                 self.turn_bg = pygame.transform.smoothscale(self.turn_bg, (bg_width, bg_height))
             except:
                 self.turn_bg = self.create_default_turn_bg()
@@ -712,14 +771,14 @@ class BattleBaseScene(BaseScene):
         
         # 位置（左侧中间）
         self.turn_bg_rect = self.turn_bg.get_rect(
-            left=int(WINDOW_WIDTH * 0.05),
-            centery=int(WINDOW_HEIGHT * 0.45)
+            left=self._safe_x(0.05),
+            centery=self._safe_y(0.45)
         )
     
     def create_default_turn_bg(self):
         """创建默认回合指示器背景"""
-        width = int(300 * UI_SCALE)
-        height = int(200 * UI_SCALE)
+        width = self._scale(300)
+        height = self._scale(200)
         surface = pygame.Surface((width, height), pygame.SRCALPHA)
         
         # 渐变背景
@@ -735,27 +794,27 @@ class BattleBaseScene(BaseScene):
         
         # 边框
         pygame.draw.rect(surface, (150, 150, 200), (0, 0, width, height), 3,
-                        border_radius=int(10 * UI_SCALE))
+                border_radius=self._scale(10))
         
         return surface
 
     """====================UI组件创建类===================="""
     def create_health_bars(self):
         """创建血量条"""
-        bar_width = int(HEALTH_BAR_WIDTH * UI_SCALE)
-        bar_height = int(HEALTH_BAR_HEIGHT * UI_SCALE)
+        bar_width = self._scale(HEALTH_BAR_WIDTH)
+        bar_height = self._scale(HEALTH_BAR_HEIGHT)
         
         # 玩家血量条
-        player_x = int(WINDOW_WIDTH * HEALTH_X_RATIO)
-        player_y = int(WINDOW_HEIGHT * PLAYER_HEALTH_Y_RATIO)
+        player_x = self._safe_x(HEALTH_X_RATIO)
+        player_y = self._safe_y(PLAYER_HEALTH_Y_RATIO)
         self.player_health_bar = HealthBar(
             player_x, player_y, bar_width, bar_height,
             self.player_max_hp, self.player_current_hp, is_player=True
         )
         
         # 敌人血量条
-        enemy_x = int(WINDOW_WIDTH * HEALTH_X_RATIO)
-        enemy_y = int(WINDOW_HEIGHT * ENEMY_HEALTH_Y_RATIO)
+        enemy_x = self._safe_x(HEALTH_X_RATIO)
+        enemy_y = self._safe_y(ENEMY_HEALTH_Y_RATIO)
         self.enemy_health_bar = HealthBar(
             enemy_x, enemy_y, bar_width, bar_height,
             self.enemy_max_hp, self.enemy_current_hp, is_player=False
@@ -764,25 +823,40 @@ class BattleBaseScene(BaseScene):
     def create_slots(self):
         """创建所有卡牌槽位"""
         # 战斗区卡牌尺寸（应用UI缩放）
-        battle_card_width = int(BATTLE_CARD_BASE_WIDTH * UI_SCALE)
-        battle_card_height = int(BATTLE_CARD_BASE_HEIGHT * UI_SCALE)
-        battle_card_spacing = int(BATTLE_CARD_SPACING * UI_SCALE)
+        slot_scale = self._slot_scale_factor()
+        battle_card_width = self._scale(BATTLE_CARD_BASE_WIDTH * slot_scale)
+        battle_card_height = self._scale(BATTLE_CARD_BASE_HEIGHT * slot_scale)
+        battle_card_spacing = self._scale(BATTLE_CARD_SPACING * slot_scale)
+        battle_card_width, battle_card_height, battle_card_spacing = self._fit_slot_band(
+            BATTLE_SLOTS_COUNT,
+            battle_card_width,
+            battle_card_height,
+            battle_card_spacing,
+            margin_hint=self._scale(120)
+        )
         
         # 等候区卡牌尺寸（应用UI缩放）
-        waiting_card_width = int(WAITING_CARD_BASE_WIDTH * UI_SCALE)
-        waiting_card_height = int(WAITING_CARD_BASE_HEIGHT * UI_SCALE)
-        waiting_card_spacing = int(WAITING_CARD_SPACING * UI_SCALE)
+        waiting_card_width = self._scale(WAITING_CARD_BASE_WIDTH * slot_scale)
+        waiting_card_height = self._scale(WAITING_CARD_BASE_HEIGHT * slot_scale)
+        waiting_card_spacing = self._scale(WAITING_CARD_SPACING * slot_scale)
+        waiting_card_width, waiting_card_height, waiting_card_spacing = self._fit_slot_band(
+            WAITING_SLOTS_COUNT,
+            waiting_card_width,
+            waiting_card_height,
+            waiting_card_spacing,
+            margin_hint=self._scale(160)
+        )
         
         # 弃牌堆尺寸（应用UI缩放）
-        discard_width = int(DISCARD_CARD_BASE_WIDTH * UI_SCALE)
-        discard_height = int(DISCARD_CARD_BASE_HEIGHT * UI_SCALE)
+        discard_width = self._scale(DISCARD_CARD_BASE_WIDTH * slot_scale)
+        discard_height = self._scale(DISCARD_CARD_BASE_HEIGHT * slot_scale)
         
         # === 战斗区槽位（中间两列，对战）===
         total_battle_width = BATTLE_SLOTS_COUNT * battle_card_width + (BATTLE_SLOTS_COUNT - 1) * battle_card_spacing
-        battle_start_x = (WINDOW_WIDTH - total_battle_width) // 2
+        battle_start_x = self.safe_origin_x + (self.safe_width - total_battle_width) // 2
         
         # 玩家战斗区（下方）
-        player_battle_y = int(WINDOW_HEIGHT * PLAYER_BATTLE_Y_RATIO)
+        player_battle_y = self._safe_y(PLAYER_BATTLE_Y_RATIO)
         for i in range(BATTLE_SLOTS_COUNT):
             x = battle_start_x + i * (battle_card_width + battle_card_spacing)
             slot = CardSlot(x, player_battle_y, battle_card_width, battle_card_height, 
@@ -790,7 +864,7 @@ class BattleBaseScene(BaseScene):
             self.player_battle_slots.append(slot)
         
         # 敌人战斗区（上方）
-        enemy_battle_y = int(WINDOW_HEIGHT * ENEMY_BATTLE_Y_RATIO)
+        enemy_battle_y = self._safe_y(ENEMY_BATTLE_Y_RATIO)
         for i in range(BATTLE_SLOTS_COUNT):
             x = battle_start_x + i * (battle_card_width + battle_card_spacing)
             slot = CardSlot(x, enemy_battle_y, battle_card_width, battle_card_height, 
@@ -799,10 +873,10 @@ class BattleBaseScene(BaseScene):
         
         # === 等候区槽位（边缘一排）===
         total_waiting_width = WAITING_SLOTS_COUNT * waiting_card_width + (WAITING_SLOTS_COUNT - 1) * waiting_card_spacing
-        waiting_start_x = (WINDOW_WIDTH - total_waiting_width) // 2
+        waiting_start_x = self.safe_origin_x + (self.safe_width - total_waiting_width) // 2
         
         # 玩家等候区（靠近玩家侧底部）
-        player_waiting_y = int(WINDOW_HEIGHT * PLAYER_WAITING_Y_RATIO)
+        player_waiting_y = self._safe_y(PLAYER_WAITING_Y_RATIO)
         for i in range(WAITING_SLOTS_COUNT):
             x = waiting_start_x + i * (waiting_card_width + waiting_card_spacing)
             slot = CardSlot(x, player_waiting_y, waiting_card_width, waiting_card_height, 
@@ -810,7 +884,7 @@ class BattleBaseScene(BaseScene):
             self.player_waiting_slots.append(slot)
         
         # 敌人等候区（靠近敌人侧顶部）
-        enemy_waiting_y = int(WINDOW_HEIGHT * ENEMY_WAITING_Y_RATIO)
+        enemy_waiting_y = self._safe_y(ENEMY_WAITING_Y_RATIO)
         for i in range(WAITING_SLOTS_COUNT):
             x = waiting_start_x + i * (waiting_card_width + waiting_card_spacing)
             slot = CardSlot(x, enemy_waiting_y, waiting_card_width, waiting_card_height, 
@@ -819,15 +893,15 @@ class BattleBaseScene(BaseScene):
         
         # === 弃牌堆（角落）===
         # 玩家弃牌堆（右下角）
-        player_discard_x = int(WINDOW_WIDTH * PLAYER_DISCARD_X_RATIO)
-        player_discard_y = int(WINDOW_HEIGHT * PLAYER_DISCARD_Y_RATIO)
+        player_discard_x = self._safe_x(PLAYER_DISCARD_X_RATIO)
+        player_discard_y = self._safe_y(PLAYER_DISCARD_Y_RATIO)
         self.player_discard_slot = CardSlot(
             player_discard_x, player_discard_y, discard_width, discard_height, "discard"
         )
         
         # 敌人弃牌堆（右上角）
-        enemy_discard_x = int(WINDOW_WIDTH * ENEMY_DISCARD_X_RATIO)
-        enemy_discard_y = int(WINDOW_HEIGHT * ENEMY_DISCARD_Y_RATIO)
+        enemy_discard_x = self._safe_x(ENEMY_DISCARD_X_RATIO)
+        enemy_discard_y = self._safe_y(ENEMY_DISCARD_Y_RATIO)
         self.enemy_discard_slot = CardSlot(
             enemy_discard_x, enemy_discard_y, discard_width, discard_height, "discard"
         )
@@ -836,14 +910,11 @@ class BattleBaseScene(BaseScene):
         """创建UI按钮"""
         # 返回按钮（左下角）
         self.back_button = Button(
-            self.margin,
-            int(WINDOW_HEIGHT * 0.95),
-            self.button_width,
-            self.button_height,
+            self.safe_origin_x + self.margin, self._safe_y(0.95),
+            self.button_width, self.button_height,
             "返回菜单",
-            color=(100, 100, 100),
-            hover_color=(130, 130, 130),
-            font_size=24,
+            color=(100, 100, 100), hover_color=(130, 130, 130),
+            font_size=self._font_size(24),
             on_click=lambda: self.switch_to("main_menu")
         )
 
@@ -851,44 +922,33 @@ class BattleBaseScene(BaseScene):
     def draw_scene_labels(self):
         """绘制场景标签"""
         # 敌人区域标签
-        enemy_label = self.title_font.render("敌方区域", True, (255, 100, 100))
-        enemy_rect = enemy_label.get_rect(center=(WINDOW_WIDTH // 2, int(WINDOW_HEIGHT * 0.2)))
-        
-        # 半透明背景
-        label_bg = pygame.Surface((enemy_rect.width + 20, enemy_rect.height + 10), pygame.SRCALPHA)
-        label_bg.fill((0, 0, 0, 120))
-        self.screen.blit(label_bg, (enemy_rect.x - 10, enemy_rect.y - 5))
+        enemy_label = self._label_cache['enemy_label']
+        enemy_rect = enemy_label.get_rect(center=(self._safe_center_x(), self._safe_y(0.2)))
+        self.screen.blit(self._label_cache['enemy_bg'], (enemy_rect.x - 10, enemy_rect.y - 5))
         self.screen.blit(enemy_label, enemy_rect)
         
         # 玩家区域标签
-        player_label = self.title_font.render("我方区域", True, (100, 255, 100))
-        player_rect = player_label.get_rect(center=(WINDOW_WIDTH // 2, int(WINDOW_HEIGHT * 0.8)))
-        
-        label_bg = pygame.Surface((player_rect.width + 20, player_rect.height + 10), pygame.SRCALPHA)
-        label_bg.fill((0, 0, 0, 120))
-        self.screen.blit(label_bg, (player_rect.x - 10, player_rect.y - 5))
+        player_label = self._label_cache['player_label']
+        player_rect = player_label.get_rect(center=(self._safe_center_x(), self._safe_y(0.8)))
+        self.screen.blit(self._label_cache['player_bg'], (player_rect.x - 10, player_rect.y - 5))
         self.screen.blit(player_label, player_rect)
     
     def draw_health_bars(self):
         """绘制血量条"""
         # 玩家名称和血量条
-        player_name = self.info_font.render("玩家", True, (200, 255, 200))
         player_name_pos = (self.player_health_bar.rect.x, 
-                          self.player_health_bar.rect.y - int(25 * UI_SCALE))
-        self.screen.blit(player_name, player_name_pos)
+                  self.player_health_bar.rect.y - self._scale(25))
+        self.screen.blit(self._label_cache['player_name'], player_name_pos)
         self.player_health_bar.draw(self.screen)
         
         # 敌人名称和血量条
-        enemy_name = self.info_font.render("敌人", True, (255, 200, 200))
         enemy_name_pos = (self.enemy_health_bar.rect.x, 
-                         self.enemy_health_bar.rect.y - int(25 * UI_SCALE))
-        self.screen.blit(enemy_name, enemy_name_pos)
+                 self.enemy_health_bar.rect.y - self._scale(25))
+        self.screen.blit(self._label_cache['enemy_name'], enemy_name_pos)
         self.enemy_health_bar.draw(self.screen)
     
     def draw_slots(self):
         """绘制所有槽位"""
-        battle_label_font = get_font(max(12, int(16 * UI_SCALE))) # 战斗区标签
-        
         # 玩家战斗区
         for slot in self.player_battle_slots:
             slot.draw(self.screen)
@@ -897,11 +957,11 @@ class BattleBaseScene(BaseScene):
         for slot in self.enemy_battle_slots:
             slot.draw(self.screen)
         
-        waiting_label = battle_label_font.render("等候区", True, (200, 200, 150)) # 等候区标签和槽位
+        waiting_label = self._label_cache['waiting_label']
         
         # 玩家等候区
         if self.player_waiting_slots:
-            label_x = self.player_waiting_slots[0].rect.x - int(80 * UI_SCALE)
+            label_x = self.player_waiting_slots[0].rect.x - self._scale(80)
             label_y = self.player_waiting_slots[0].rect.centery
             self.screen.blit(waiting_label, (label_x, label_y))
         for slot in self.player_waiting_slots:
@@ -909,23 +969,23 @@ class BattleBaseScene(BaseScene):
         
         # 敌人等候区
         if self.enemy_waiting_slots:
-            label_x = self.enemy_waiting_slots[0].rect.x - int(80 * UI_SCALE)
+            label_x = self.enemy_waiting_slots[0].rect.x - self._scale(80)
             label_y = self.enemy_waiting_slots[0].rect.centery
             self.screen.blit(waiting_label, (label_x, label_y))
         for slot in self.enemy_waiting_slots:
             slot.draw(self.screen)
         
-        discard_label = battle_label_font.render("弃牌堆", True, (200, 150, 150)) # 弃牌堆标签和槽位
+        discard_label = self._label_cache['discard_label']
         
         # 玩家弃牌堆
         discard_x = self.player_discard_slot.rect.x
-        discard_y = self.player_discard_slot.rect.y - int(25 * UI_SCALE)
+        discard_y = self.player_discard_slot.rect.y - self._scale(25)
         self.screen.blit(discard_label, (discard_x, discard_y))
         self.player_discard_slot.draw(self.screen)
         
         # 敌人弃牌堆
         discard_x = self.enemy_discard_slot.rect.x
-        discard_y = self.enemy_discard_slot.rect.y - int(25 * UI_SCALE)
+        discard_y = self.enemy_discard_slot.rect.y - self._scale(25)
         self.screen.blit(discard_label, (discard_x, discard_y))
         self.enemy_discard_slot.draw(self.screen)
 
@@ -951,15 +1011,19 @@ class BattleBaseScene(BaseScene):
         """绘制回合指示器"""
         self.screen.blit(self.turn_bg, self.turn_bg_rect) # 背景图
         if self.turn_indicator_flash_alpha > 0:
-            flash_surface = pygame.Surface(self.turn_bg.get_size(), pygame.SRCALPHA)
-            flash_surface.fill((255, 255, 255, self.turn_indicator_flash_alpha))
-            self.screen.blit(flash_surface, self.turn_bg_rect.topleft)
+            if self._flash_surface_cache is None:
+                self._flash_surface_cache = pygame.Surface(self.turn_bg.get_size(), pygame.SRCALPHA)
+            self._flash_surface_cache.fill((255, 255, 255, self.turn_indicator_flash_alpha))
+            self.screen.blit(self._flash_surface_cache, self.turn_bg_rect.topleft)
         
         # 回合数
-        turn_font = get_font(int(48 * UI_SCALE))
-        turn_text = turn_font.render(f"回合 {self.turn_number}", True, (255, 215, 0))
-        top_padding = int(18 * UI_SCALE)
-        content_gap = int(10 * UI_SCALE)
+        turn_key = f"turn_{self.turn_number}"
+        if turn_key not in self._turn_text_cache:
+            turn_font = get_font(self._font_size(48))
+            self._turn_text_cache[turn_key] = turn_font.render(f"回合 {self.turn_number}", True, (255, 215, 0))
+        turn_text = self._turn_text_cache[turn_key]
+        top_padding = self._scale(18)
+        content_gap = self._scale(10)
         turn_rect = turn_text.get_rect(
             centerx=self.turn_bg_rect.centerx,
             top=self.turn_bg_rect.top + top_padding
@@ -967,16 +1031,18 @@ class BattleBaseScene(BaseScene):
         self.screen.blit(turn_text, turn_rect)
         
         # 当前玩家
-        player_font = get_font(int(28 * UI_SCALE))
-        
         if self.current_turn == "player1":
-            player_text = "玩家回合"
+            player_key = "player_turn"
             color = (100, 255, 100)
         else:
-            player_text = "敌人回合"
+            player_key = "enemy_turn"
             color = (255, 100, 100)
         
-        player_surface = player_font.render(player_text, True, color)
+        if player_key not in self._turn_text_cache:
+            player_font = get_font(self._font_size(28))
+            player_text = "玩家回合" if player_key == "player_turn" else "敌人回合"
+            self._turn_text_cache[player_key] = player_font.render(player_text, True, color)
+        player_surface = self._turn_text_cache[player_key]
         scale_factor = self.turn_indicator_scale
         if scale_factor != 1.0:
             new_size = (
@@ -991,15 +1057,21 @@ class BattleBaseScene(BaseScene):
         self.screen.blit(player_surface, player_rect)
         
         # 出牌状态
-        status_font = get_font(max(16, int(20 * UI_SCALE)))
         if self.can_play_card():
-            status_text = f"可出牌: {self.max_cards_per_turn - self.cards_played_this_turn}/{self.max_cards_per_turn}"
+            status_key = f"status_{self.max_cards_per_turn - self.cards_played_this_turn}_{self.max_cards_per_turn}"
             status_color = (200, 200, 255)
         else:
-            status_text = "已出牌"
+            status_key = "status_done"
             status_color = (150, 150, 150)
         
-        status_surface = status_font.render(status_text, True, status_color)
+        if status_key not in self._turn_text_cache:
+            status_font = get_font(self._font_size(20, minimum=16))
+            if self.can_play_card():
+                status_text = f"可出牌: {self.max_cards_per_turn - self.cards_played_this_turn}/{self.max_cards_per_turn}"
+            else:
+                status_text = "已出牌"
+            self._turn_text_cache[status_key] = status_font.render(status_text, True, status_color)
+        status_surface = self._turn_text_cache[status_key]
         status_rect = status_surface.get_rect(
             centerx=self.turn_bg_rect.centerx,
             top=player_rect.bottom + content_gap
@@ -1008,63 +1080,79 @@ class BattleBaseScene(BaseScene):
 
     def draw_game_over_overlay(self):
         """绘制游戏结束遮罩"""
-        overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 200))
-        self.screen.blit(overlay, (0, 0))
+        if self._overlay_cache is None:
+            self._overlay_cache = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
+            self._overlay_cache.fill((0, 0, 0, 200))
+        self.screen.blit(self._overlay_cache, (0, 0))
 
-        result_font = get_font(max(48, int(72 * UI_SCALE)))
-        victory = self.winner == "player1"
-        result_text = "胜利！" if victory else "失败..."
-        result_color = (100, 255, 100) if victory else (255, 100, 100)
-        result_surface = result_font.render(result_text, True, result_color)
-        result_rect = result_surface.get_rect(center=(WINDOW_WIDTH // 2, int(WINDOW_HEIGHT * 0.3)))
+        # Cache game over text if not already cached
+        if self._game_over_text_cache is None:
+            self._game_over_text_cache = {}
+            
+            result_font = get_font(self._font_size(72, minimum=48))
+            victory = self.winner == "player1"
+            result_text = "胜利！" if victory else "失败..."
+            result_color = (100, 255, 100) if victory else (255, 100, 100)
+            self._game_over_text_cache['result'] = result_font.render(result_text, True, result_color)
+
+            info_font = get_font(self._font_size(32))
+            reward = self.settlement_data.get("reward", {})
+            gold = reward.get("gold", 0)
+            xp = reward.get("xp", 0)
+            crystals = reward.get("crystals", 0)
+            items = reward.get("items", [])
+            lines = [
+                (f"金币 +{gold}", (255, 220, 120)),
+                (f"经验 +{xp}", (200, 220, 255)),
+            ]
+            if crystals:
+                lines.append((f"水晶 +{crystals}", (255, 180, 90)))
+            for card_info in reward.get("bonus_cards", []) or []:
+                name = card_info.get("name", "未知卡牌")
+                rarity = card_info.get("rarity", "?")
+                lines.append((f"获得卡牌：[{rarity}] {name}", (180, 220, 255)))
+            def _normalize_entries(source):
+                normalized = []
+                if not source:
+                    return normalized
+                entries = source if isinstance(source, (list, tuple)) else [source]
+                for item in entries:
+                    if isinstance(item, dict):
+                        text = item.get("text") or item.get("label")
+                        color = tuple(item.get("color", (200, 200, 200)))
+                        if text:
+                            normalized.append((text, color))
+                    else:
+                        normalized.append((str(item), (200, 200, 200)))
+                return normalized
+
+            lines.extend(_normalize_entries(items))
+            lines.extend(_normalize_entries(reward.get("drops", [])))
+            if not victory:
+                lines.append(("（战败获得安慰经验）", (200, 200, 200)))
+            
+            # Render all lines and cache them
+            self._game_over_text_cache['lines'] = []
+            for text, color in lines:
+                line_surface = info_font.render(text, True, color)
+                self._game_over_text_cache['lines'].append(line_surface)
+            
+            hint_font = get_font(self._font_size(24))
+            hint_text = "按 ESC 或点击确认返回"
+            self._game_over_text_cache['hint'] = hint_font.render(hint_text, True, (200, 200, 200))
+
+        # Draw cached surfaces
+        result_surface = self._game_over_text_cache['result']
+        result_rect = result_surface.get_rect(center=(self._safe_center_x(), self._safe_y(0.3)))
         self.screen.blit(result_surface, result_rect)
 
-        info_font = get_font(int(32 * UI_SCALE))
-        reward = self.settlement_data.get("reward", {})
-        gold = reward.get("gold", 0)
-        xp = reward.get("xp", 0)
-        crystals = reward.get("crystals", 0)
-        items = reward.get("items", [])
-        lines = [
-            (f"金币 +{gold}", (255, 220, 120)),
-            (f"经验 +{xp}", (200, 220, 255)),
-        ]
-        if crystals:
-            lines.append((f"水晶 +{crystals}", (255, 180, 90)))
-        for card_info in reward.get("bonus_cards", []) or []:
-            name = card_info.get("name", "未知卡牌")
-            rarity = card_info.get("rarity", "?")
-            lines.append((f"获得卡牌：[{rarity}] {name}", (180, 220, 255)))
-        def _normalize_entries(source):
-            normalized = []
-            if not source:
-                return normalized
-            entries = source if isinstance(source, (list, tuple)) else [source]
-            for item in entries:
-                if isinstance(item, dict):
-                    text = item.get("text") or item.get("label")
-                    color = tuple(item.get("color", (200, 200, 200)))
-                    if text:
-                        normalized.append((text, color))
-                else:
-                    normalized.append((str(item), (200, 200, 200)))
-            return normalized
-
-        lines.extend(_normalize_entries(items))
-        lines.extend(_normalize_entries(reward.get("drops", [])))
-        if not victory:
-            lines.append(("（战败获得安慰经验）", (200, 200, 200)))
-        for idx, (text, color) in enumerate(lines):
-            line_surface = info_font.render(text, True, color)
-            line_rect = line_surface.get_rect(center=(WINDOW_WIDTH // 2, int(WINDOW_HEIGHT * 0.4) + idx * int(40 * UI_SCALE)))
+        for idx, line_surface in enumerate(self._game_over_text_cache['lines']):
+            line_rect = line_surface.get_rect(center=(self._safe_center_x(), self._safe_y(0.4) + idx * self._scale(40)))
             self.screen.blit(line_surface, line_rect)
 
         self.confirm_button.draw(self.screen)
-        hint_font = get_font(int(24 * UI_SCALE))
-        hint_text = "按 ESC 或点击确认返回"
-        hint_surface = hint_font.render(hint_text, True, (200, 200, 200))
-        hint_rect = hint_surface.get_rect(center=(WINDOW_WIDTH // 2, int(WINDOW_HEIGHT * 0.75)))
+        hint_surface = self._game_over_text_cache['hint']
+        hint_rect = hint_surface.get_rect(center=(self._safe_center_x(), self._safe_y(0.75)))
         self.screen.blit(hint_surface, hint_rect)
 
     """====================辅助工具类===================="""
@@ -1572,7 +1660,7 @@ class BattleBaseScene(BaseScene):
         
             self.draw() # 重绘整个场景
             self.screen.blit(temp_card, current_rect) # 在动画卡牌上方绘制
-            pygame.display.flip()
+            self._present_frame() # 更新显示
             
             # 处理退出事件（避免卡死）
             for event in pygame.event.get():
@@ -1607,7 +1695,7 @@ class BattleBaseScene(BaseScene):
             temp_card.set_alpha(alpha)
             self.draw() # 重绘整个场景
             self.screen.blit(temp_card, current_rect) # 绘制淡出的卡牌
-            pygame.display.flip()
+            self._present_frame()
             
             # 处理退出事件
             for event in pygame.event.get():
@@ -1876,3 +1964,77 @@ class BattleBaseScene(BaseScene):
                 if executed and animation:
                     animation.start()
                     self.battle_animations.append(animation)
+
+    # ==================== UI缩放辅助 ====================
+    def _compute_scene_ui_scale(self):
+        base_scale = UI_SCALE
+        visible_height = max(1, VISIBLE_HEIGHT)
+        if base_scale >= 1.0 or visible_height >= DESIGN_HEIGHT:
+            return base_scale
+        boost = min(MAX_BATTLE_SCALE_BOOST, DESIGN_HEIGHT / visible_height)
+        return base_scale * boost
+
+    def _scale(self, value):
+        return int(round(value * self.scene_ui_scale))
+
+    def _font_size(self, value, minimum=8):
+        return max(minimum, int(round(value * self.scene_ui_scale)))
+
+    def _update_safe_area(self):
+        self.safe_origin_x = config.VIEW_SRC_X
+        self.safe_origin_y = config.VIEW_SRC_Y
+        self.safe_width = max(1, config.VISIBLE_WIDTH)
+        self.safe_height = max(1, config.VISIBLE_HEIGHT)
+
+    def _safe_x(self, ratio):
+        return self.safe_origin_x + int(self.safe_width * ratio)
+
+    def _safe_y(self, ratio):
+        return self.safe_origin_y + int(self.safe_height * ratio)
+
+    def _safe_center_x(self):
+        return self.safe_origin_x + self.safe_width // 2
+
+    def _fit_slot_band(self, count, width, height, spacing, margin_hint):
+        """缩放一排槽位，避免总宽度超过屏幕（保持纵横比）。"""
+        if count <= 0:
+            return width, height, spacing
+        target_width = self.safe_width
+        margin = max(0, margin_hint)
+        usable = max(1, target_width - margin * 2)
+        total = count * width + max(0, count - 1) * spacing
+        if total <= usable:
+            return width, height, spacing
+        shrink = usable / total
+        width = max(24, int(round(width * shrink)))
+        height = max(36, int(round(height * shrink)))
+        spacing = max(4, int(round(spacing * shrink)))
+        if count > 1:
+            total = count * width + (count - 1) * spacing
+            if total > usable:
+                overflow = total - usable
+                spacing = max(2, spacing - math.ceil(overflow / (count - 1)))
+        total = count * width + max(0, count - 1) * spacing
+        if total > usable:
+            overflow = total - usable
+            width = max(20, width - math.ceil(overflow / count))
+        return width, height, spacing
+
+    def _slot_scale_factor(self):
+        visible_width = max(1, self.safe_width)
+        return min(1.0, visible_width / DESIGN_WIDTH)
+
+    def _present_frame(self):
+        display = pygame.display.get_surface()
+        if not display or self.screen is None:
+            pygame.display.flip()
+            return
+        display.fill((0, 0, 0))
+        src_rect = pygame.Rect(
+            VIEW_SRC_X,
+            VIEW_SRC_Y,
+            VISIBLE_WIDTH,
+            VISIBLE_HEIGHT,
+        )
+        display.blit(self.screen, (VIEW_DEST_X, VIEW_DEST_Y), src_rect)
+        pygame.display.flip()

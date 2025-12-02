@@ -30,6 +30,11 @@ class CardSlot:
         self.shake_animation = None
         self.hp_flash_animation = None
         self.original_rect = pygame.Rect(x, y, width, height)
+        
+        # Performance caches
+        self._empty_slot_cache = None
+        self._cd_cache = {}  # CD text and backgrounds
+        self._stats_cache = {}  # ATK/HP text
 
     def set_card(self, card_data):
         """
@@ -138,34 +143,41 @@ class CardSlot:
             if self.hp_flash_animation:
                 self.hp_flash_animation.draw(screen)
         else:
-            # 空槽位
-            alpha = 150 if self.is_highlighted else 80
-            slot_surface = pygame.Surface((self.rect.width, self.rect.height), pygame.SRCALPHA)
+            # 空槽位 - cache based on state
+            cache_key = (self.is_highlighted, self.is_hovered)
+            if cache_key not in self._empty_slot_cache if isinstance(self._empty_slot_cache, dict) else True:
+                if not isinstance(self._empty_slot_cache, dict):
+                    self._empty_slot_cache = {}
+                    
+                alpha = 150 if self.is_highlighted else 80
+                slot_surface = pygame.Surface((self.rect.width, self.rect.height), pygame.SRCALPHA)
+                
+                # 根据槽位类型选择颜色
+                if self.slot_type == "battle":
+                    color = (100, 150, 200, alpha)
+                    border_color = (150, 200, 255, 200)
+                elif self.slot_type == "waiting":
+                    color = (150, 150, 100, alpha)
+                    border_color = (200, 200, 150, 200)
+                else:  # discard
+                    color = (150, 100, 100, alpha)
+                    border_color = (200, 150, 150, 200)
+                
+                slot_surface.fill(color)
+                
+                # 边框
+                border_width = max(2, int(3 * UI_SCALE))
+                if self.is_hovered:
+                    border_width = max(3, int(4 * UI_SCALE))
+                    border_color = (255, 255, 255, 255)
+                
+                pygame.draw.rect(slot_surface, border_color, 
+                               (0, 0, self.rect.width, self.rect.height), 
+                               border_width, border_radius=max(5, int(8 * UI_SCALE)))
+                
+                self._empty_slot_cache[cache_key] = slot_surface
             
-            # 根据槽位类型选择颜色
-            if self.slot_type == "battle":
-                color = (100, 150, 200, alpha)
-                border_color = (150, 200, 255, 200)
-            elif self.slot_type == "waiting":
-                color = (150, 150, 100, alpha)
-                border_color = (200, 200, 150, 200)
-            else:  # discard
-                color = (150, 100, 100, alpha)
-                border_color = (200, 150, 150, 200)
-            
-            slot_surface.fill(color)
-            
-            # 边框
-            border_width = max(2, int(3 * UI_SCALE))
-            if self.is_hovered:
-                border_width = max(3, int(4 * UI_SCALE))
-                border_color = (255, 255, 255, 255)
-            
-            pygame.draw.rect(slot_surface, border_color, 
-                           (0, 0, self.rect.width, self.rect.height), 
-                           border_width, border_radius=max(5, int(8 * UI_SCALE)))
-            
-            screen.blit(slot_surface, self.rect)
+            screen.blit(self._empty_slot_cache[cache_key], self.rect)
     
     """CD指示器（准备区）"""
     def draw_cd_indicator(self, screen):
@@ -179,64 +191,79 @@ class CardSlot:
         
         cd_rect = pygame.Rect(cd_x, cd_y, cd_width, cd_height)
         
-        # 背景
-        cd_surface = pygame.Surface((cd_width, cd_height), pygame.SRCALPHA)
+        # Cache CD surface and text
+        cache_key = (self.cd_remaining, cd_width, cd_height)
+        if cache_key not in self._cd_cache:
+            cd_surface = pygame.Surface((cd_width, cd_height), pygame.SRCALPHA)
+            
+            # 根据 CD 状态选择颜色
+            if self.cd_remaining == 0:
+                bg_color = (100, 255, 100, 200)  # 绿色：准备好
+                text_color = (0, 100, 0)
+            else:
+                bg_color = (255, 200, 100, 200)  # 橙色：冷却中
+                text_color = (100, 50, 0)
+            
+            cd_surface.fill(bg_color)
+            pygame.draw.rect(cd_surface, (255, 255, 255), 
+                            (0, 0, cd_width, cd_height), 2,
+                            border_radius=max(5, int(8 * UI_SCALE)))
+            
+            # CD 文字
+            font = get_font(max(14, int(20 * UI_SCALE)))
+            if self.cd_remaining == 0:
+                cd_text = "就绪"
+            else:
+                cd_text = f"CD:{self.cd_remaining}"
+            
+            text_surface = font.render(cd_text, True, text_color)
+            text_rect = text_surface.get_rect(center=(cd_width // 2, cd_height // 2))
+            cd_surface.blit(text_surface, text_rect)
+            
+            self._cd_cache[cache_key] = cd_surface
         
-        # 根据 CD 状态选择颜色
-        if self.cd_remaining == 0:
-            bg_color = (100, 255, 100, 200)  # 绿色：准备好
-            text_color = (0, 100, 0)
-        else:
-            bg_color = (255, 200, 100, 200)  # 橙色：冷却中
-            text_color = (100, 50, 0)
-        
-        cd_surface.fill(bg_color)
-        pygame.draw.rect(cd_surface, (255, 255, 255), 
-                        (0, 0, cd_width, cd_height), 2,
-                        border_radius=max(5, int(8 * UI_SCALE)))
-        
-        screen.blit(cd_surface, cd_rect)
-        
-        # CD 文字
-        font = get_font(max(14, int(20 * UI_SCALE)))
-        if self.cd_remaining == 0:
-            cd_text = "就绪"
-        else:
-            cd_text = f"CD:{self.cd_remaining}"
-        
-        text_surface = font.render(cd_text, True, text_color)
-        text_rect = text_surface.get_rect(center=cd_rect.center)
-        screen.blit(text_surface, text_rect)
+        screen.blit(self._cd_cache[cache_key], cd_rect)
     
     """绘制属性（战斗区）"""
     def draw_stats(self, screen, offset_x=0, offset_y=0):
         font = get_font(STATE_FONT_SIZE)
         
-        # ATK（左下角红色）
-        atk_text = f"{self.card_data.atk}"
-        atk_surface = font.render(atk_text, True, ATK_COLOR)  # 红色
-        outline_font = font
-        outline_surfaces = [outline_font.render(atk_text, True, (0, 0, 0))]
+        # Cache ATK text
+        atk_key = ('atk', self.card_data.atk)
+        if atk_key not in self._stats_cache:
+            atk_text = f"{self.card_data.atk}"
+            self._stats_cache[atk_key] = {
+                'surface': font.render(atk_text, True, ATK_COLOR),
+                'outline': font.render(atk_text, True, (0, 0, 0))
+            }
+        
+        atk_data = self._stats_cache[atk_key]
         atk_pos = (
             self.rect.left + STATE_X_OFFSET + offset_x,
             self.rect.bottom - STATE_Y_OFFSET + offset_y
         )
         for dx, dy in [(-1, -1), (-1, 1), (1, -1), (1, 1)]:
-            screen.blit(outline_surfaces[0], (atk_pos[0] + dx, atk_pos[1] + dy)) # 绘制描边
-        screen.blit(atk_surface, atk_pos) # 绘制ATK
+            screen.blit(atk_data['outline'], (atk_pos[0] + dx, atk_pos[1] + dy))
+        screen.blit(atk_data['surface'], atk_pos)
         
-        # HP（右下角绿色）
-        hp_text = f"{self.card_data.hp}"
-        hp_surface = font.render(hp_text, True, HP_COLOR)
-        hp_outline = outline_font.render(hp_text, True, (0, 0, 0))
-        hp_rect = hp_surface.get_rect()
+        # Cache HP text
+        hp_key = ('hp', self.card_data.hp)
+        if hp_key not in self._stats_cache:
+            hp_text = f"{self.card_data.hp}"
+            self._stats_cache[hp_key] = {
+                'surface': font.render(hp_text, True, HP_COLOR),
+                'outline': font.render(hp_text, True, (0, 0, 0)),
+                'rect': font.render(hp_text, True, HP_COLOR).get_rect()
+            }
+        
+        hp_data = self._stats_cache[hp_key]
         hp_pos = (
-            self.rect.right - hp_rect.width - STATE_X_OFFSET + offset_x,
+            self.rect.right - hp_data['rect'].width - STATE_X_OFFSET + offset_x,
             self.rect.bottom - STATE_Y_OFFSET + offset_y
         )
         for dx, dy in [(-1, -1), (-1, 1), (1, -1), (1, 1)]:
-            screen.blit(hp_outline, (hp_pos[0] + dx, hp_pos[1] + dy)) # 绘制描边
-        screen.blit(hp_surface, hp_pos) # 绘制HP
+            screen.blit(hp_data['outline'], (hp_pos[0] + dx, hp_pos[1] + dy))
+        screen.blit(hp_data['surface'], hp_pos)
 
     def start_shake_animation(self, duration=0.4, intensity=5):
         """开始震动动画"""

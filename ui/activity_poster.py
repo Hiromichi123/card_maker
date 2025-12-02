@@ -67,11 +67,31 @@ class PosterUI:
 
         # poster 数据
         self.poster_paths: List[str] = []
-        self._poster_surfs: List[Optional[pygame.Surface]] = []
+        self._poster_raw_surfs: List[Optional[pygame.Surface]] = []
+        self._prepared_posters: List[Optional[pygame.Surface]] = []
+        self._placeholder_surface: Optional[pygame.Surface] = None
+        self._frame_surface: Optional[pygame.Surface] = None
+
+        self._inner_x = 0
+        self._inner_y = 0
+        self._inner_w = 2
+        self._inner_h = 2
+        self._recompute_inner_area()
 
         self.set_posters() # 从assets/poster目录读取海报
 
     # ---------- poster 管理 ----------
+    def _recompute_inner_area(self):
+        border_total = self.border_width + self.padding
+        self._inner_x = border_total
+        self._inner_y = border_total
+        self._inner_w = max(2, self.width - 2 * border_total)
+        self._inner_h = max(2, self.height - 2 * border_total)
+        self._placeholder_surface = None
+        self._frame_surface = None
+        if getattr(self, "_poster_raw_surfs", None):
+            self._prepare_poster_cache()
+
     def set_posters(self):
         import glob
         import re
@@ -95,10 +115,10 @@ class PosterUI:
 
         self.poster_paths = found
 
-        # 初始化报缓存
-        self._poster_surfs = [None] * len(self.poster_paths)
-        for i, p in enumerate(self.poster_paths):
-            self._poster_surfs[i] = self._try_load_image(p)
+        self._poster_raw_surfs = []
+        for p in self.poster_paths:
+            self._poster_raw_surfs.append(self._try_load_image(p))
+        self._prepare_poster_cache()
 
         # 重置索引与计时器
         self.current_index = 0
@@ -106,7 +126,8 @@ class PosterUI:
 
     def clear_posters(self):
         self.poster_paths = []
-        self._poster_surfs = []
+        self._poster_raw_surfs = []
+        self._prepared_posters = []
         self.current_index = 0
         self._timer = 0.0
 
@@ -118,6 +139,52 @@ class PosterUI:
             return surf
 
         return None
+
+    def _prepare_poster_cache(self):
+        self._prepared_posters = []
+        if not self.poster_paths:
+            return
+        for surf in self._poster_raw_surfs:
+            self._prepared_posters.append(self._prepare_surface(surf))
+
+    def _prepare_surface(self, surf: Optional[pygame.Surface]) -> pygame.Surface:
+        if not surf:
+            return self._get_placeholder_surface()
+        try:
+            return self._scale_and_crop_to_fit(surf, (self._inner_w, self._inner_h))
+        except Exception:
+            return self._get_placeholder_surface()
+
+    def _get_prepared_surface(self, index: int) -> pygame.Surface:
+        if not self._prepared_posters:
+            return self._get_placeholder_surface()
+        if 0 <= index < len(self._prepared_posters):
+            surf = self._prepared_posters[index]
+            if surf:
+                return surf
+        return self._get_placeholder_surface()
+
+    def _get_placeholder_surface(self) -> pygame.Surface:
+        if self._placeholder_surface is None:
+            placeholder = pygame.Surface((self._inner_w, self._inner_h), pygame.SRCALPHA)
+            placeholder.fill(DEFAULT_PLACEHOLDER_COLOR)
+            pygame.draw.rect(
+                placeholder,
+                (140, 140, 140),
+                placeholder.get_rect(),
+                2,
+                border_radius=max(4, self.border_radius // 2)
+            )
+            self._placeholder_surface = placeholder
+        return self._placeholder_surface
+
+    def _create_frame_surface(self) -> pygame.Surface:
+        frame = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        if self.bg_color:
+            pygame.draw.rect(frame, self.bg_color, frame.get_rect(), border_radius=self.border_radius)
+        if self.border_width > 0:
+            pygame.draw.rect(frame, self.border_color, frame.get_rect(), width=self.border_width, border_radius=self.border_radius)
+        return frame
 
     # ---------- interaction ----------
     def handle_event(self, event: pygame.event.Event):
@@ -159,83 +226,40 @@ class PosterUI:
         self._topleft = topleft
         x, y = topleft
         self._rect = pygame.Rect(x, y, self.width, self.height)
+        if self._frame_surface is None:
+            self._frame_surface = self._create_frame_surface()
+        surface.blit(self._frame_surface, (x, y))
 
-        # 目标盒子surface
-        box_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        box_surf.fill((0, 0, 0, 0))  # 先全透明
+        inner_x = self._inner_x
+        inner_y = self._inner_y
+        inner_w = self._inner_w
+        inner_h = self._inner_h
+        poster_layer = pygame.Surface((inner_w, inner_h), pygame.SRCALPHA)
 
-        # 绘制带圆角的背景矩形
-        rect_inner = pygame.Rect(0, 0, self.width, self.height)
-        if self.bg_color:
-            pygame.draw.rect(box_surf, self.bg_color, rect_inner, border_radius=self.border_radius)
-        
-        # 计算可用内部区域
-        inner_x = self.border_width + self.padding
-        inner_y = self.border_width + self.padding
-        inner_w = max(2, self.width - 2 * (self.border_width + self.padding))
-        inner_h = max(2, self.height - 2 * (self.border_width + self.padding))
-
-        # 绘制海报
-        if self.poster_paths and self._poster_surfs:
-            # 获取当前与目标图片 surface
+        if self.poster_paths and self._prepared_posters:
             cur_idx = self.current_index
             to_idx = self._anim_to if self._is_animating else cur_idx
-
-            cur_surf = self._poster_surfs[cur_idx] if cur_idx < len(self._poster_surfs) else None
-            if cur_surf is None and cur_idx < len(self.poster_paths):
-                cur_surf = self._try_load_image(self.poster_paths[cur_idx])
-                self._poster_surfs[cur_idx] = cur_surf
-
-            to_surf = self._poster_surfs[to_idx] if to_idx < len(self._poster_surfs) else None
-            if to_surf is None and to_idx < len(self.poster_paths):
-                to_surf = self._try_load_image(self.poster_paths[to_idx])
-                self._poster_surfs[to_idx] = to_surf
-
-            # 辅助绘制函数
-            def _get_draw_surf(s):
-                if s:
-                    return self._scale_and_crop_to_fit(s, (inner_w, inner_h))
-                else:
-                    # 占位图
-                    ph = pygame.Surface((inner_w, inner_h), pygame.SRCALPHA)
-                    ph.fill(DEFAULT_PLACEHOLDER_COLOR)
-                    return ph
+            cur_draw = self._get_prepared_surface(cur_idx)
+            to_draw = self._get_prepared_surface(to_idx)
 
             if not self._is_animating:
-                draw_surf = _get_draw_surf(cur_surf)
-                dx = inner_x + (inner_w - draw_surf.get_width()) // 2
-                dy = inner_y + (inner_h - draw_surf.get_height()) // 2
-                box_surf.blit(draw_surf, (dx, dy))
+                poster_layer.blit(cur_draw, (0, 0))
             else:
-                # 计算动画偏移（基于 inner_w）
                 p = max(0.0, min(1.0, self._anim_progress))
-                dir = self._anim_direction
-                cur_draw = _get_draw_surf(cur_surf)
-                to_draw = _get_draw_surf(to_surf)
-                if dir >= 0:
-                    cur_x = inner_x - int(p * inner_w)
-                    to_x = inner_x + inner_w - int(p * inner_w)
+                direction = self._anim_direction
+                if direction >= 0:
+                    cur_x = -int(p * inner_w)
+                    to_x = inner_w - int(p * inner_w)
                 else:
-                    cur_x = inner_x + int(p * inner_w)
-                    to_x = inner_x - inner_w + int(p * inner_w)
+                    cur_x = int(p * inner_w)
+                    to_x = -inner_w + int(p * inner_w)
 
-                cur_y = inner_y + (inner_h - cur_draw.get_height()) // 2
-                to_y = inner_y + (inner_h - to_draw.get_height()) // 2
-                box_surf.blit(to_draw, (to_x, to_y))
-                box_surf.blit(cur_draw, (cur_x, cur_y))
+                poster_layer.blit(to_draw, (to_x, 0))
+                poster_layer.blit(cur_draw, (cur_x, 0))
         else:
-            # 没有海报时绘制占位
-            placeholder = pygame.Surface((inner_w, inner_h), pygame.SRCALPHA)
-            placeholder.fill(DEFAULT_PLACEHOLDER_COLOR)
-            pygame.draw.rect(placeholder, (140, 140, 140), placeholder.get_rect(), 2, border_radius=max(4, self.border_radius // 2))
-            box_surf.blit(placeholder, (inner_x, inner_y))
+            poster_layer.blit(self._get_placeholder_surface(), (0, 0))
 
-        # 绘制边框（圆角）
-        if self.border_width > 0:
-            pygame.draw.rect(box_surf, self.border_color, rect_inner, width=self.border_width, border_radius=self.border_radius)
-
-        # 绘制到主 surface
-        surface.blit(box_surf, (x, y))
+        surface.blit(poster_layer, (x + inner_x, y + inner_y))
 
     # ---------- playback轮播控制 ----------
     def play(self):
